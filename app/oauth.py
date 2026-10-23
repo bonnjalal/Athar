@@ -87,9 +87,10 @@ def member_required(f):
         if not username:
             return redirect(url_for('oauth.login'))
             
-        user = User.query.filter_by(username=username).first()
-        if not user or not user.is_member:
-            abort(403, description="Access restricted: Active Meta-Wiki group membership required.")
+        if not session.get('is_member'):
+            user = User.query.filter_by(username=username).first()
+            if not user or not user.is_member:
+                abort(403, description="Access restricted: Active Meta-Wiki group membership required.")
             
         return f(*args, **kwargs)
     return decorated_function

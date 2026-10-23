@@ -10,6 +10,7 @@ env/
 .env
 dev.db
 *.sqlite3
+Wikimedia_auth.txt
 
 # Test caches & coverage
 .pytest_cache/

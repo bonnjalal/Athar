@@ -99,7 +99,7 @@ class Project(db.Model):
     __tablename__ = "projects"
 
     id = db.Column(db.Integer, primary_key=True)
-    community_id = db.Column(db.Integer, db.ForeignKey("communities.id"), nullable=False, index=True)
+    community_id = db.Column(db.Integer, db.ForeignKey("communities.id"), nullable=True, index=True)
     title = db.Column(db.String(255), nullable=False)
     description = db.Column(db.Text, nullable=False)  # Bleach sanitized HTML
     project_type = db.Column(db.String(64), default="Workshop", nullable=False)

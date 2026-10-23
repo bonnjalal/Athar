@@ -17,7 +17,7 @@ class Config:
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     
     # Wikimedia User-Agent Policy
-    USER_AGENT = "Athar/1.0 (https://athar.toolforge.org; contact@wikimedia.ma)"
+    USER_AGENT = os.environ.get('USER_AGENT', 'Athar/1.0 (https://athar.toolforge.org; bonnjalal@gmail.com)')
     
     # Your Task 2 Additions
     MOCK_AUTH = os.environ.get('MOCK_AUTH', 'False').lower() == 'true'

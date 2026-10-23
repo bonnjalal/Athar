@@ -4,11 +4,9 @@
 
 {% block content %}
 <div class="cdx-hero-container" style="text-align: center; padding: 3rem 1rem; max-width: 800px; margin: 0 auto;">
-    <!-- Athar Logo -->
+    <!-- Athar Hero Logo -->
     <div class="cdx-logo-wrapper" style="margin-bottom: 1.5rem;">
-        <span class="cdx-badge cdx-badge--brand" style="font-size: 2.5rem; padding: 0.5rem 1.5rem; background-color: #d32f2f; color: white; border-radius: 8px;">
-            أثر
-        </span>
+        <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Athar Logo" style="max-height: 150px; width: auto; object-fit: contain;">
     </div>
 
     <!-- Project Description -->
@@ -40,17 +38,26 @@
 
         <!-- Hidden Form for Adding Community -->
         <div id="add-community-form" style="display: none; margin-top: 1.5rem; text-align: right; border-top: 1px solid #eaecf0; padding-top: 1.5rem;">
-            <form action="#" method="POST" onsubmit="event.preventDefault(); alert('Community request received successfully!');">
-                <div style="margin-bottom: 1rem;">
-                    <label for="community-name" style="display: block; margin-bottom: 0.5rem; font-weight: bold; color: #202122;">اسم المجتمع الخاص بك</label>
-                    <input type="text" id="community-name" name="community_name" class="cdx-text-input" style="width: 100%; padding: 0.5rem; border: 1px solid #a2a9b1; border-radius: 2px;" placeholder="Enter community name..." required>
+            {% if session.get('username') %}
+                <form action="{{ url_for('web.add_community') }}" method="POST">
+                    <div style="margin-bottom: 1rem;">
+                        <label for="community-name" style="display: block; margin-bottom: 0.5rem; font-weight: bold; color: #202122;">اسم المجتمع الخاص بك</label>
+                        <input type="text" id="community-name" name="community_name" class="cdx-text-input" style="width: 100%; padding: 0.5rem; border: 1px solid #a2a9b1; border-radius: 2px;" placeholder="Enter community name..." required>
+                    </div>
+                    <div style="margin-bottom: 1rem;">
+                        <label for="community-link" style="display: block; margin-bottom: 0.5rem; font-weight: bold; color: #202122;">رابط المجتمع</label>
+                        <input type="url" id="community-link" name="community_link" class="cdx-text-input" style="width: 100%; padding: 0.5rem; border: 1px solid #a2a9b1; border-radius: 2px;" placeholder="https://meta.wikimedia.org/wiki/..." required>
+                    </div>
+                    <button type="submit" class="cdx-button cdx-button--action cdx-button--weight-primary" style="width: 100%;">حفظ وإضافة المجتمع</button>
+                </form>
+            {% else %}
+                <div style="text-align: center; padding: 1rem;">
+                    <p style="color: #54595d; margin-bottom: 1rem;">يجب تسجيل الدخول بحساب ويكيميديا الخاص بك لإضافة مجتمع جديد.</p>
+                    <a href="{{ url_for('oauth.login') }}" class="cdx-button cdx-button--action cdx-button--weight-primary" style="text-decoration: none; display: inline-block;">
+                        Log in with Wikimedia
+                    </a>
                 </div>
-                <div style="margin-bottom: 1rem;">
-                    <label for="community-link" style="display: block; margin-bottom: 0.5rem; font-weight: bold; color: #202122;">رابط المجتمع</label>
-                    <input type="url" id="community-link" name="community_link" class="cdx-text-input" style="width: 100%; padding: 0.5rem; border: 1px solid #a2a9b1; border-radius: 2px;" placeholder="https://meta.wikimedia.org/wiki/..." required>
-                </div>
-                <button type="submit" class="cdx-button cdx-button--action cdx-button--weight-primary" style="width: 100%;">حفظ وإضافة المجتمع</button>
-            </form>
+            {% endif %}
         </div>
     </div>
 </div>

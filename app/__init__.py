@@ -31,5 +31,6 @@ def create_app(config_class=Config):
     app.register_blueprint(web_bp)
     app.register_blueprint(api_bp, url_prefix="/api")
     app.register_blueprint(oauth_bp)
+    csrf.exempt(api_bp)
 
     return app

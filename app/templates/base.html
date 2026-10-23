@@ -11,28 +11,29 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body class="cdx-body">
-    <header class="cdx-header">
-        <div class="header-container">
-            <a href="{{ url_for('web.index') }}" class="brand-title">
-                <span class="brand-badge">Athar</span> {{ community.name if community else 'Athar Project' }}
-            </a>
-            
-            <!-- Hide navigation and login on the landing page (index), show them on community dashboards -->
-            {% if request.endpoint != 'web.index' %}
-                <nav class="nav-links">
-                    {% if session.get('username') %}
-                        <a href="{{ url_for('web.dashboard', slug=community.slug if community else 'wm-ma') }}" class="cdx-button cdx-button--quiet">Dashboard</a>
-                        <a href="{{ url_for('web.create_project') }}" class="cdx-button cdx-button--action cdx-button--weight-primary">+ Add Activity</a>
-                        <span class="user-greeting">Welcome, <strong>{{ session.get('username') }}</strong></span>
-                        <a href="{{ url_for('oauth.logout') }}" class="cdx-button cdx-button--quiet">Log out</a>
-                    {% else %}
-                        <a href="{{ url_for('oauth.login') }}" class="cdx-button cdx-button--action cdx-button--weight-primary">Log in with Wikimedia</a>
-                    {% endif %}
-                </nav>
+<header class="cdx-header">
+    <div class="header-container" style="display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 1.5rem;">
+        <a href="{{ url_for('web.index') }}" class="brand-title" style="display: flex; align-items: center; gap: 0.75rem; text-decoration: none; color: inherit;">
+            <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Athar Logo" style="height: 40px; width: auto; object-fit: contain;">
+            {% if community %}
+                <span style="font-weight: bold; font-size: 1.2rem;">{{ community.name }}</span>
             {% endif %}
-        </div>
-    </header>
-
+        </a>
+        
+        {% if request.endpoint and request.endpoint != 'web.index' %}
+            <nav class="nav-links">
+                {% if session.get('username') %}
+                    <a href="{{ url_for('web.dashboard', slug=community.slug if community else 'wm-ma') }}" class="cdx-button cdx-button--quiet">Dashboard</a>
+                    <a href="{{ url_for('web.create_project') }}" class="cdx-button cdx-button--action cdx-button--weight-primary">+ Add Activity</a>
+                    <span class="user-greeting">Welcome, <strong>{{ session.get('username') }}</strong></span>
+                    <a href="{{ url_for('oauth.logout') }}" class="cdx-button cdx-button--quiet">Log out</a>
+                {% else %}
+                    <a href="{{ url_for('oauth.login') }}" class="cdx-button cdx-button--action cdx-button--weight-primary">Log in with Wikimedia</a>
+                {% endif %}
+            </nav>
+        {% endif %}
+    </div>
+</header>
     <main class="main-content">
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
