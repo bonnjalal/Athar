@@ -11,14 +11,14 @@ document.addEventListener("DOMContentLoaded", () => {
     let activityChart = null;
     let overviewChart = null;
 
-    // Get community slug from the current URL.
-    // Example: http://127.0.0.1:5000/wm-ma/ -> wm-ma
     function getCommunitySlug() {
         const pathParts = window.location.pathname
             .split("/")
             .filter(Boolean);
 
-        return pathParts.length ? pathParts[pathParts.length - 1] : null;
+        return pathParts.length
+            ? pathParts[pathParts.length - 1]
+            : null;
     }
 
     function showError(message) {
@@ -69,14 +69,11 @@ document.addEventListener("DOMContentLoaded", () => {
             );
 
             if (!response.ok) {
-                throw new Error(
-                    `Failed to load stats (${response.status})`
-                );
+                throw new Error(`Failed to load stats (${response.status})`);
             }
 
             const stats = await response.json();
 
-            // Update summary cards.
             if (membersElement) {
                 membersElement.textContent =
                     stats.total_community_member ?? 0;
@@ -92,8 +89,17 @@ document.addEventListener("DOMContentLoaded", () => {
                     stats.total_edits_member_comm ?? 0;
             }
 
-            // Bar chart: projects by type.
+            // Bar chart: projects by type
             const activities = stats.activities_by_type ?? {};
+            const activityLabels = Object.keys(activities);
+            const activityValues = Object.values(activities);
+
+            const activityColors = {
+                "Contest / Competition": "#8b5cf6",
+                "Edit-a-thon": "#06b6d4",
+                "Photo Walk": "#f59e0b",
+                "Workshop": "#10b981"
+            };
 
             if (activityCanvas) {
                 if (activityChart) {
@@ -103,12 +109,15 @@ document.addEventListener("DOMContentLoaded", () => {
                 activityChart = new Chart(activityCanvas, {
                     type: "bar",
                     data: {
-                        labels: Object.keys(activities),
+                        labels: activityLabels,
                         datasets: [{
                             label: "Number of projects",
-                            data: Object.values(activities),
-                            backgroundColor: "#4f46e5",
-                            borderRadius: 5
+                            data: activityValues,
+                            backgroundColor: activityLabels.map(
+                                label => activityColors[label] || "#64748b"
+                            ),
+                            borderRadius: 5,
+                            borderSkipped: false
                         }]
                     },
                     options: {
@@ -131,6 +140,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 });
             }
 
+            // Doughnut chart: community members vs projects
             if (overviewCanvas) {
                 if (overviewChart) {
                     overviewChart.destroy();
@@ -139,19 +149,13 @@ document.addEventListener("DOMContentLoaded", () => {
                 overviewChart = new Chart(overviewCanvas, {
                     type: "doughnut",
                     data: {
-                        labels: [
-                            "Community members",
-                            "Projects"
-                        ],
+                        labels: ["Community members", "Projects"],
                         datasets: [{
                             data: [
                                 stats.total_community_member ?? 0,
                                 stats.total_project_member ?? 0
                             ],
-                            backgroundColor: [
-                                "#0ea5e9",
-                                "#f59e0b"
-                            ],
+                            backgroundColor: ["#0ea5e9", "#f59e0b"],
                             borderWidth: 0
                         }]
                     },
