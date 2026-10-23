@@ -4,11 +4,96 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ config.COMMUNITY_NAME if config else 'Athar Project' }} — Athar</title>
+    
+    <!-- Instant Theme Loader (Executes before render to avoid white flash) -->
+    <script>
+        (function() {
+            const savedTheme = localStorage.getItem('theme') || 'light';
+            if (savedTheme === 'dark') {
+                document.documentElement.setAttribute('data-theme', 'dark');
+            }
+        })();
+    </script>
+
     <!-- Wikimedia Codex CSS Distribution -->
     <link rel="stylesheet" href="https://tools-static.wmflabs.org/cdnjs/ajax/libs/codex/0.17.1/codex.style.min.css">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/codex.style.css') }}">
     <!-- Chart.js for data visualization -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        :root {
+            --bg-color: #ffffff;
+            --text-color: #202122;
+            --card-bg: #ffffff;
+            --border-color: #a2a9b1;
+            --header-bg: #ffffff;
+            --subtext-color: #54595d;
+        }
+
+        [data-theme="dark"] {
+            --bg-color: #121212;
+            --text-color: #f8f9fa;
+            --card-bg: #1e1e1e;
+            --border-color: #54595d;
+            --header-bg: #1a1a1a;
+            --subtext-color: #eaecf0;
+        }
+
+        /* Global Body Styling */
+        html[data-theme="dark"], 
+        [data-theme="dark"] body.cdx-body {
+            background-color: var(--bg-color) !important;
+            color: var(--text-color) !important;
+        }
+
+        /* Header Styling Override */
+        header.cdx-header,
+        .cdx-header {
+            background-color: var(--header-bg) !important;
+            border-bottom: 1px solid var(--border-color) !important;
+            transition: background-color 0.3s ease;
+        }
+
+        [data-theme="dark"] header.cdx-header,
+        [data-theme="dark"] .cdx-header {
+            background-color: #1a1a1a !important;
+            border-bottom: 1px solid #54595d !important;
+            color: #f8f9fa !important;
+        }
+
+        [data-theme="dark"] .cdx-header a,
+        [data-theme="dark"] .header-container span,
+        [data-theme="dark"] .brand-title span {
+            color: #f8f9fa !important;
+        }
+
+        /* Cards & Container Containers */
+        .cdx-community-select-card,
+        [data-theme="dark"] .cdx-community-select-card,
+        [data-theme="dark"] .dashboard-container,
+        [data-theme="dark"] .card {
+            background-color: var(--card-bg) !important;
+            border-color: var(--border-color) !important;
+            color: var(--text-color) !important;
+        }
+
+        /* Typography Override */
+        h1, h2, h3, h4, h5, h6, 
+        [data-theme="dark"] h1, [data-theme="dark"] h2, [data-theme="dark"] h3 {
+            color: var(--text-color) !important;
+        }
+
+        p, label, span, 
+        [data-theme="dark"] p, [data-theme="dark"] label, [data-theme="dark"] span {
+            color: var(--text-color);
+        }
+
+        .cdx-footer p,
+        [data-theme="dark"] .cdx-footer p {
+            color: var(--subtext-color);
+        }
+    </style>
 </head>
 <body class="cdx-body">
 <header class="cdx-header">
@@ -20,20 +105,28 @@
             {% endif %}
         </a>
         
-        {% if request.endpoint and request.endpoint != 'web.index' %}
-            <nav class="nav-links">
-                {% if session.get('username') %}
-                    <a href="{{ url_for('web.dashboard', slug=community.slug if community else 'wm-ma') }}" class="cdx-button cdx-button--quiet">Dashboard</a>
-                    <a href="{{ url_for('web.create_project') }}" class="cdx-button cdx-button--action cdx-button--weight-primary">+ Add Activity</a>
-                    <span class="user-greeting">Welcome, <strong>{{ session.get('username') }}</strong></span>
-                    <a href="{{ url_for('oauth.logout') }}" class="cdx-button cdx-button--quiet">Log out</a>
-                {% else %}
-                    <a href="{{ url_for('oauth.login') }}" class="cdx-button cdx-button--action cdx-button--weight-primary">Log in with Wikimedia</a>
-                {% endif %}
-            </nav>
-        {% endif %}
+        <div style="display: flex; align-items: center; gap: 1rem;">
+            <!-- Dark / Light Theme Toggle -->
+            <button id="theme-toggle" class="cdx-button cdx-button--quiet" onclick="toggleTheme()" title="Toggle Light/Dark Mode" style="font-size: 1.2rem; cursor: pointer;">
+                🌙
+            </button>
+
+            {% if request.endpoint and request.endpoint != 'web.index' %}
+                <nav class="nav-links" style="display: flex; align-items: center; gap: 0.5rem;">
+                    {% if session.get('username') %}
+                        <a href="{{ url_for('web.dashboard', slug=community.slug if community else 'wm-ma') }}" class="cdx-button cdx-button--quiet">Dashboard</a>
+                        <a href="{{ url_for('web.create_project') }}" class="cdx-button cdx-button--action cdx-button--weight-primary">+ Add Activity</a>
+                        <span class="user-greeting">Welcome, <strong>{{ session.get('username') }}</strong></span>
+                        <a href="{{ url_for('oauth.logout') }}" class="cdx-button cdx-button--quiet">Log out</a>
+                    {% else %}
+                        <a href="{{ url_for('oauth.login') }}" class="cdx-button cdx-button--action cdx-button--weight-primary">Log in with Wikimedia</a>
+                    {% endif %}
+                </nav>
+            {% endif %}
+        </div>
     </div>
 </header>
+
     <main class="main-content">
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
@@ -53,6 +146,33 @@
     <footer class="cdx-footer">
         <p>Athar — An open-source community tool hosted on <a href="https://toolforge.org">Wikimedia Toolforge</a>.</p>
     </footer>
+
+    <script>
+        // Update UI button icon on page load
+        (function() {
+            const savedTheme = localStorage.getItem('theme') || 'light';
+            const btn = document.getElementById('theme-toggle');
+            if (savedTheme === 'dark' && btn) {
+                btn.textContent = '☀️';
+            }
+        })();
+
+        // Function to toggle light/dark theme
+        function toggleTheme() {
+            const currentTheme = document.documentElement.getAttribute('data-theme');
+            const themeBtn = document.getElementById('theme-toggle');
+
+            if (currentTheme === 'dark') {
+                document.documentElement.setAttribute('data-theme', 'light');
+                localStorage.setItem('theme', 'light');
+                if (themeBtn) themeBtn.textContent = '🌙';
+            } else {
+                document.documentElement.setAttribute('data-theme', 'dark');
+                localStorage.setItem('theme', 'dark');
+                if (themeBtn) themeBtn.textContent = '☀️';
+            }
+        }
+    </script>
 
     {% block scripts %}{% endblock %}
 </body>
