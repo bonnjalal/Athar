@@ -28,7 +28,6 @@ class TestApiEndpoints(unittest.TestCase):
                 name="Wikimedia Morocco",
                 slug="wm-ma",
                 meta_roster_page="Wikimedia_MA/Members",
-                default_wiki="ar.wikipedia.org",
                 contact_email="contact@wikimedia.ma"
             )
             db.session.add(self.community)

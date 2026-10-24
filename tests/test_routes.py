@@ -120,7 +120,6 @@ class TestRoutesAndSecurity(unittest.TestCase):
         res = self.client.post("/add-community", data={
             "community_name": "Wikimedia Algeria",
             "community_link": "https://meta.wikimedia.org/wiki/Wikimedia_DZ/Members",
-            "default_wiki": "ar.wikipedia.org",
             "contact_email": "contact@dz.wikimedia.org"
         }, follow_redirects=False)
 

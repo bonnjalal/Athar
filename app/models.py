@@ -10,7 +10,6 @@ class Community(db.Model):
   name = db.Column(db.String(120), unique=True, nullable=False)
   slug = db.Column(db.String(64), unique=True, nullable=False, index=True)
   meta_roster_page = db.Column(db.String(255), nullable=False)
-  default_wiki = db.Column(db.String(64), default="ar.wikipedia.org")
   contact_email = db.Column(db.String(128), nullable=True)
   created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
@@ -26,7 +25,6 @@ class Community(db.Model):
       "name": self.name,
       "slug": self.slug,
       "meta_roster_page": self.meta_roster_page,
-      "default_wiki": self.default_wiki,
       "contact_email": self.contact_email,
       "created_at": self.created_at.isoformat() if self.created_at else None
     }

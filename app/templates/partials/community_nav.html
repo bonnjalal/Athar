@@ -7,7 +7,6 @@
             {% if community.meta_roster_page %}
                 <span>صفحة الأعضاء: <a href="{{ community.meta_roster_page if community.meta_roster_page.startswith('http') else 'https://meta.wikimedia.org/wiki/' + community.meta_roster_page }}" target="_blank" rel="noopener" style="color: #36c;">Meta-Wiki</a></span>
             {% endif %}
-            <span>المشروع الافتراضي: <strong>{{ community.default_wiki }}</strong></span>
         </div>
     </div>
 

@@ -110,19 +110,11 @@
                                    value="{{ pending_link or '' }}" required>
                         </div>
 
-                        <div class="form-row" style="display: flex; gap: 1rem; margin-bottom: 1.25rem; flex-wrap: wrap;">
-                            <div class="form-group" style="flex: 1; min-width: 200px; text-align: right;">
-                                <label for="default-wiki" class="cdx-label" style="font-weight: 600; display: block; margin-bottom: 0.35rem;">المشروع المستهدف الافتراضي</label>
-                                <input type="text" id="default-wiki" name="default_wiki" class="cdx-text-input" 
-                                       style="width: 100%; padding: 0.6rem; border: 1px solid #a2a9b1; border-radius: 4px;" 
-                                       value="ar.wikipedia.org">
-                            </div>
-                            <div class="form-group" style="flex: 1; min-width: 200px; text-align: right;">
-                                <label for="contact-email" class="cdx-label" style="font-weight: 600; display: block; margin-bottom: 0.35rem;">البريد الإلكتروني للتواصل (اختياري)</label>
-                                <input type="email" id="contact-email" name="contact_email" class="cdx-text-input" 
-                                       style="width: 100%; padding: 0.6rem; border: 1px solid #a2a9b1; border-radius: 4px;" 
-                                       placeholder="contact@wikimedia.org">
-                            </div>
+                        <div class="form-group" style="margin-bottom: 1.25rem; text-align: right;">
+                            <label for="contact-email" class="cdx-label" style="font-weight: 600; display: block; margin-bottom: 0.35rem;">البريد الإلكتروني للتواصل (اختياري)</label>
+                            <input type="email" id="contact-email" name="contact_email" class="cdx-text-input" 
+                                   style="width: 100%; padding: 0.6rem; border: 1px solid #a2a9b1; border-radius: 4px;" 
+                                   placeholder="contact@wikimedia.org">
                         </div>
 
                         <button type="submit" class="cdx-button cdx-button--action cdx-button--weight-primary" style="width: 100%; padding: 0.75rem; font-size: 1rem;">

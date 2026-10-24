@@ -247,7 +247,7 @@ def create_projetct(slug):
     else:
         project_type = raw_type or "Workshop"
 
-    raw_target_wiki = data.get("target_wiki", community.default_wiki or "arwiki")
+    raw_target_wiki = data.get("target_wiki", "arwiki")
     try:
         target_wiki, _ = normalize_wiki_target(raw_target_wiki)
     except ValueError as err:

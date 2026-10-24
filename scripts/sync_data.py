@@ -158,7 +158,6 @@ def run_sync():
                 name="Wikimedia Morocco",
                 slug="wm-ma",
                 meta_roster_page="Wikimedia_MA_User_Group/Members",
-                default_wiki="ar.wikipedia.org",
                 contact_email="bonnjalal@gmail.com"
             )
             db.session.add(default_comm)

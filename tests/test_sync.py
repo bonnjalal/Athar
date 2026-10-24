@@ -26,14 +26,12 @@ class TestSyncData(unittest.TestCase):
             self.c1 = Community(
                 name="Wikimedia Morocco",
                 slug="wm-ma",
-                meta_roster_page="Wikimedia_MA_User_Group/Members",
-                default_wiki="ar.wikipedia.org"
+                meta_roster_page="Wikimedia_MA_User_Group/Members"
             )
             self.c2 = Community(
                 name="Wikimedia Tunisia",
                 slug="wm-tn",
-                meta_roster_page="Wikimedia_Tunisie/Membres",
-                default_wiki="ar.wikipedia.org"
+                meta_roster_page="Wikimedia_Tunisie/Membres"
             )
             db.session.add_all([self.c1, self.c2])
             db.session.commit()

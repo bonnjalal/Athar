@@ -58,7 +58,6 @@ def add_community():
 
     name = request.form.get("community_name", "").strip()
     link = request.form.get("community_link", "").strip()
-    default_wiki = request.form.get("default_wiki", "ar.wikipedia.org").strip() or "ar.wikipedia.org"
     contact_email = request.form.get("contact_email", "").strip() or None
 
     if not name or not link:
@@ -87,7 +86,6 @@ def add_community():
             name=name,
             slug=slug,
             meta_roster_page=link,
-            default_wiki=default_wiki,
             contact_email=contact_email
         )
         db.session.add(new_community)
@@ -190,7 +188,7 @@ def community_users(slug):
             "username": user_rec.username if user_rec else "Unknown",
             "role": cm.role or "Member",
             "total_edits": edits,
-            "home_wiki": latest_snap.home_wiki if latest_snap else (community.default_wiki or "ar.wikipedia.org"),
+            "home_wiki": latest_snap.home_wiki if latest_snap else "ar.wikipedia.org",
             "added_at": cm.added_at,
             "last_synced": user_rec.last_synced if user_rec else None
         })
