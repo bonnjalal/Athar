@@ -25,19 +25,19 @@
             <select id="list-comm"></select>
         </div>
 
-        <form id="dashboard-filters">
-            <div style="display: flex; flex-direction: column; gap: 4px;">
-                <label for="start-date" style="font-size: 0.82rem; color: #54595d; font-weight: 500;">تاريخ البدء:</label>
+        <form id="dashboard-filters" class="dashboard-filters-form">
+            <div class="filter-field-group">
+                <label for="start-date" class="cdx-label">تاريخ البدء</label>
                 <input type="date" id="start-date" class="cdx-text-input">
             </div>
 
-            <div style="display: flex; flex-direction: column; gap: 4px;">
-                <label for="end-date" style="font-size: 0.82rem; color: #54595d; font-weight: 500;">تاريخ الانتهاء:</label>
+            <div class="filter-field-group">
+                <label for="end-date" class="cdx-label">تاريخ الانتهاء</label>
                 <input type="date" id="end-date" class="cdx-text-input">
             </div>
 
-            <div style="display: flex; flex-direction: column; gap: 4px;">
-                <label for="activity-type" style="font-size: 0.82rem; color: #54595d; font-weight: 500;">نوع النشاط:</label>
+            <div class="filter-field-group">
+                <label for="activity-type" class="cdx-label">نوع النشاط</label>
                 <select id="activity-type" class="cdx-select">
                     <option value="">جميع أنواع الأنشطة (All types)</option>
                     <option value="Workshop">ورشات تدريبية (Workshops)</option>
@@ -55,8 +55,8 @@
                 </select>
             </div>
 
-            <div style="display: flex; flex-direction: column; gap: 4px;">
-                <label for="project-status" style="font-size: 0.82rem; color: #54595d; font-weight: 500;">حالة النشاط:</label>
+            <div class="filter-field-group">
+                <label for="project-status" class="cdx-label">حالة النشاط</label>
                 <select id="project-status" class="cdx-select">
                     <option value="">جميع الحالات (All statuses)</option>
                     <option value="In Progress">جارية (In Progress)</option>
@@ -65,7 +65,7 @@
                 </select>
             </div>
 
-            <div style="display: flex; gap: 0.5rem; align-items: flex-end;">
+            <div class="filter-actions-group">
                 <button type="submit" id="apply-filters" class="cdx-button cdx-button--action cdx-button--weight-primary">
                     تطبيق التصفية
                 </button>
