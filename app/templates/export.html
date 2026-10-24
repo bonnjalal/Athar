@@ -1,27 +1,179 @@
 {% extends "base.html" %}
 
+{% block title %}تصدير تقارير الأنشطة — أثر{% endblock %}
+
 {% block content %}
-<div class="export-container">
-    <h2>تصدير تقارير الأنشطة المجتمعية</h2>
-    <p>خاص بمنسقي مجموعة المستخدمين لتقديم التقارير الربع سنوية إلى مؤسسة ويكيميديا.</p>
+<div class="export-tool-container">
 
-    <div class="export-card">
-        <h3>تصدير كافة الأنشطة الحالية</h3>
-        <p>تحميل ملف بصيغة CSV يتضمن المعرفات، العناوين، المنظمين، ولجان التحكيم.</p>
-        <a href="/api/export" class="cdx-button cdx-button--action cdx-button--weight-primary">
-            تحميل ملف CSV
-        </a>
-        
+    <!-- Header Description Card -->
+    <div class="export-header-card">
+        <h1 class="export-header-title">تصدير تقارير الأنشطة المجتمعية</h1>
+        <p class="export-header-desc">
+            أداة مخصصة للمنسقين ولجان التحكيم لتصدير سجلات الأنشطة والمشاريع الخاصة بكل مجموعة أو مجتمع إلى ملف بصيغة CSV، مع إمكانية التصفية الدقيقة بحسب السنة، الشهر، أو فترة زمنية مخصصة لتقديم التقارير الربع سنوية إلى مؤسسة ويكيميديا.
+        </p>
+    </div>
 
+    <!-- Export Configuration Form Card -->
+    <div class="export-form-card">
+        <form id="export-filter-form" onsubmit="event.preventDefault(); triggerCsvDownload();">
+            
+            <!-- Step 1: Community Selection -->
+            <div class="form-group" style="margin-bottom: 1.5rem;">
+                <label for="export-community" class="cdx-label" style="font-weight: 700; margin-bottom: 0.5rem; display: block;">
+                    1. اختر المجتمع أو المجموعة الشقيقة *
+                </label>
+                <select id="export-community" class="cdx-select" style="width: 100%;" onchange="onCommunityChange()">
+                    {% for comm in communities %}
+                        <option value="{{ comm.slug }}" {% if selected_slug == comm.slug %}selected{% endif %}>
+                            {{ comm.name }} ({{ comm.slug }})
+                        </option>
+                    {% endfor %}
+                </select>
+                <div style="font-size: 0.82rem; color: #54595d; margin-top: 4px;">
+                    يتم تصدير أنشطة المجتمع المحدد فقط بشكل منفصل.
+                </div>
+            </div>
+
+            <!-- Step 2: Time Filter Mode -->
+            <div class="form-group" style="margin-bottom: 1.5rem;">
+                <label class="cdx-label" style="font-weight: 700; margin-bottom: 0.75rem; display: block;">
+                    2. حدد نطاق التصفية الزمني *
+                </label>
+                <div class="export-filter-pills" role="radiogroup" aria-label="نطاق التصفية">
+                    <button type="button" class="export-filter-pill is-active" data-mode="year" onclick="setFilterMode('year')">
+                        حسب السنة
+                    </button>
+                    <button type="button" class="export-filter-pill" data-mode="month" onclick="setFilterMode('month')">
+                        حسب الشهر
+                    </button>
+                    <button type="button" class="export-filter-pill" data-mode="custom" onclick="setFilterMode('custom')">
+                        فترة مخصصة
+                    </button>
+                    <button type="button" class="export-filter-pill" data-mode="all" onclick="setFilterMode('all')">
+                        كافة الفترات
+                    </button>
+                </div>
+            </div>
+
+            <!-- Step 3: Dynamic Filter Panels -->
+            <div class="export-controls-panel" id="controls-panel">
+                
+                <!-- Panel A: By Year -->
+                <div id="panel-year" class="filter-panel">
+                    <div class="form-group" style="margin: 0;">
+                        <label for="filter-year" class="cdx-label" style="margin-bottom: 0.4rem; display: block;">حدد السنة:</label>
+                        <select id="filter-year" class="cdx-select" style="width: 100%; max-width: 320px;" onchange="updateLivePreview()">
+                            {% for yr in available_years %}
+                                <option value="{{ yr }}" {% if yr == current_year %}selected{% endif %}>سنة {{ yr }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Panel B: By Month -->
+                <div id="panel-month" class="filter-panel" style="display: none;">
+                    <div class="form-row" style="display: flex; gap: 1rem; flex-wrap: wrap;">
+                        <div class="form-group" style="flex: 1; min-width: 180px; margin: 0;">
+                            <label for="filter-month-year" class="cdx-label" style="margin-bottom: 0.4rem; display: block;">السنة:</label>
+                            <select id="filter-month-year" class="cdx-select" style="width: 100%;" onchange="updateLivePreview()">
+                                {% for yr in available_years %}
+                                    <option value="{{ yr }}" {% if yr == current_year %}selected{% endif %}>سنة {{ yr }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="form-group" style="flex: 1; min-width: 180px; margin: 0;">
+                            <label for="filter-month-val" class="cdx-label" style="margin-bottom: 0.4rem; display: block;">الشهر:</label>
+                            <select id="filter-month-val" class="cdx-select" style="width: 100%;" onchange="updateLivePreview()">
+                                <option value="1" {% if current_month == 1 %}selected{% endif %}>01 — يناير</option>
+                                <option value="2" {% if current_month == 2 %}selected{% endif %}>02 — فبراير</option>
+                                <option value="3" {% if current_month == 3 %}selected{% endif %}>03 — مارس</option>
+                                <option value="4" {% if current_month == 4 %}selected{% endif %}>04 — أبريل</option>
+                                <option value="5" {% if current_month == 5 %}selected{% endif %}>05 — مايو</option>
+                                <option value="6" {% if current_month == 6 %}selected{% endif %}>06 — يونيو</option>
+                                <option value="7" {% if current_month == 7 %}selected{% endif %}>07 — يوليو</option>
+                                <option value="8" {% if current_month == 8 %}selected{% endif %}>08 — أغسطس</option>
+                                <option value="9" {% if current_month == 9 %}selected{% endif %}>09 — سبتمبر</option>
+                                <option value="10" {% if current_month == 10 %}selected{% endif %}>10 — أكتوبر</option>
+                                <option value="11" {% if current_month == 11 %}selected{% endif %}>11 — نوفمبر</option>
+                                <option value="12" {% if current_month == 12 %}selected{% endif %}>12 — ديسمبر</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Panel C: Custom Date Range -->
+                <div id="panel-custom" class="filter-panel" style="display: none;">
+                    <div class="form-row" style="display: flex; gap: 1rem; flex-wrap: wrap;">
+                        <div class="form-group" style="flex: 1; min-width: 180px; margin: 0;">
+                            <label for="filter-custom-start" class="cdx-label" style="margin-bottom: 0.4rem; display: block;">من تاريخ (تاريخ البدء):</label>
+                            <input type="date" id="filter-custom-start" class="cdx-text-input" style="width: 100%;" onchange="updateLivePreview()">
+                        </div>
+                        <div class="form-group" style="flex: 1; min-width: 180px; margin: 0;">
+                            <label for="filter-custom-end" class="cdx-label" style="margin-bottom: 0.4rem; display: block;">إلى تاريخ (تاريخ الانتهاء):</label>
+                            <input type="date" id="filter-custom-end" class="cdx-text-input" style="width: 100%;" onchange="updateLivePreview()">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Panel D: All Time -->
+                <div id="panel-all" class="filter-panel" style="display: none;">
+                    <div style="font-size: 0.9rem; color: #54595d;">
+                        سيتم تصدير كافة الأنشطة والمشاريع المسجلة لهذه المجموعة منذ التأسيس بدون قيد زمني.
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Step 4: Live Preview & Matched Projects -->
+            <div class="export-preview-card">
+                <div class="export-preview-header">
+                    <div>
+                        <h4 style="margin: 0 0 4px 0; font-size: 1.05rem; color: #202122;">معاينة الأنشطة الجاهزة للتصدير</h4>
+                        <div id="preview-filter-desc" style="font-size: 0.85rem; color: #54595d;">-</div>
+                    </div>
+                    <span id="preview-count-badge" class="export-preview-badge">جاري الفحص...</span>
+                </div>
+
+                <div id="preview-table-container" style="overflow-x: auto;">
+                    <table class="export-preview-table" id="preview-table">
+                        <thead>
+                            <tr>
+                                <th style="width: 45px; text-align: center;">#</th>
+                                <th>عنوان النشاط</th>
+                                <th>نوع النشاط</th>
+                                <th>المشروع المستهدف</th>
+                                <th>الحالة</th>
+                                <th>تاريخ البدء</th>
+                            </tr>
+                        </thead>
+                        <tbody id="preview-tbody">
+                            <!-- Populated dynamically via JS -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <div id="preview-empty-state" style="display: none; text-align: center; padding: 2rem 1rem; color: #72777d; font-size: 0.95rem;">
+                    لا توجد أي أنشطة مطابقة للمجموعة والفترة الزمنية المحددة.
+                </div>
+            </div>
+
+            <!-- Step 5: Export Actions -->
+            <div class="export-actions-row">
+                <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
+                    <button type="submit" id="btn-export-csv" class="cdx-button cdx-button--action cdx-button--weight-primary" style="padding: 0 24px; font-size: 1rem;">
+                        تحميل التقرير بصيغة CSV
+                    </button>
+                    <a id="btn-direct-link" href="#" class="cdx-button cdx-button--quiet" style="font-size: 0.9rem;" target="_blank" rel="noopener">
+                        رابط التحميل المباشر
+                    </a>
+                </div>
+
+                <a href="{{ url_for('web.index') }}" class="cdx-button">العودة للرئيسية</a>
+            </div>
+
+        </form>
     </div>
-    <div class="export-community">
-        <h3>تصدير كافة الأنشطة الحالية الخاصة بالمجموعة المعنية</h3>
-        <select name="" id="communities"></select>
-        <p>تحميل ملف بصيغة CSV يتضمن المعرفات، العناوين، المنظمين، ولجان التحكيم.</p>
-        <a href="" class="cdx-button cdx-button--action cdx-button--weight-primary" id="export-comm-btn">
-            تحميل ملف CSV
-        </a>
-    </div>
+
 </div>
 {% endblock %}
 

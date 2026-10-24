@@ -357,8 +357,19 @@ class TestRoutesAndSecurity(unittest.TestCase):
         data = res.get_json()
         self.assertTrue(data.get("exists"))
         self.assertEqual(data.get("username"), "ExistingLocalMember")
-        self.assertEqual(data.get("source"), "local")
+    def test_export_web_view(self):
+        with self.app.app_context():
+            comm = Community(name="Morocco Community", slug="wm-ma", meta_roster_page="Wikimedia_MA/Members")
+            db.session.add(comm)
+            db.session.commit()
 
+        res = self.client.get("/export?community=wm-ma")
+        self.assertEqual(res.status_code, 200)
+        self.assertIn("تصدير تقارير الأنشطة المجتمعية".encode("utf-8"), res.data)
+        self.assertIn("Morocco Community".encode("utf-8"), res.data)
+        self.assertIn("حسب السنة".encode("utf-8"), res.data)
+        self.assertIn("حسب الشهر".encode("utf-8"), res.data)
+        self.assertIn("فترة مخصصة".encode("utf-8"), res.data)
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,6 +1,7 @@
 import csv
 import io
-from datetime import datetime
+import calendar
+from datetime import datetime, date
 from flask import Blueprint, jsonify, request, Response, session
 from app.models import Community, Project, User, StatSnapshot, CommunityMember
 from app.oauth import member_required, project_editor_required, get_current_user
@@ -10,6 +11,70 @@ import bleach
 from app.wiki_utils import normalize_wiki_target
 
 api_bp = Blueprint("api", __name__)
+
+
+def _filter_projects_by_date(query, args):
+    """Filter Project query by year, month, or custom date range."""
+    filter_type = args.get("filter_type")
+    year_arg = args.get("year")
+    month_arg = args.get("month")
+    start_arg = args.get("start_date") or args.get("from_date")
+    end_arg = args.get("end_date") or args.get("to_date")
+
+    start_date = None
+    end_date = None
+
+    if filter_type == "year" or (year_arg and not month_arg and not start_arg and not filter_type):
+        if year_arg:
+            try:
+                y = int(year_arg)
+                start_date = date(y, 1, 1)
+                end_date = date(y, 12, 31)
+            except (ValueError, TypeError):
+                pass
+    elif filter_type == "month" or (month_arg and not start_arg and not filter_type):
+        try:
+            if month_arg and "-" in str(month_arg):
+                parts = str(month_arg).split("-")
+                y = int(parts[0])
+                m = int(parts[1])
+            else:
+                y = int(year_arg) if year_arg else datetime.utcnow().year
+                m = int(month_arg)
+            if 1 <= m <= 12:
+                _, last_day = calendar.monthrange(y, m)
+                start_date = date(y, m, 1)
+                end_date = date(y, m, last_day)
+        except (ValueError, TypeError):
+            pass
+    elif filter_type == "custom" or start_arg or end_arg:
+        if start_arg:
+            try:
+                start_date = datetime.strptime(start_arg.strip(), "%Y-%m-%d").date()
+            except ValueError:
+                pass
+        if end_arg:
+            try:
+                end_date = datetime.strptime(end_arg.strip(), "%Y-%m-%d").date()
+            except ValueError:
+                pass
+
+    if start_date:
+        query = query.filter(
+            db.or_(
+                db.and_(Project.start_date.isnot(None), Project.start_date >= start_date),
+                db.and_(Project.start_date.is_(None), Project.created_at >= datetime.combine(start_date, datetime.min.time()))
+            )
+        )
+    if end_date:
+        query = query.filter(
+            db.or_(
+                db.and_(Project.start_date.isnot(None), Project.start_date <= end_date),
+                db.and_(Project.start_date.is_(None), Project.created_at <= datetime.combine(end_date, datetime.max.time()))
+            )
+        )
+
+    return query, start_date, end_date
 
 def get_request_data():
     """Extract request data supporting both JSON payloads and Form submissions."""
@@ -70,30 +135,13 @@ def list_projects():
 
 @api_bp.route("/export", methods=["GET"])
 def export_csv():
-    projects = Project.query.order_by(Project.created_at.desc()).all()
-    output = io.StringIO()
-    writer = csv.writer(output)
-
-    writer.writerow(["ID", "Title", "Type", "Target Wiki", "Status", "Lead Organizer", "Co-Organizers", "Is Contest", "Created At"])
-    for p in projects:
-        writer.writerow([
-            p.id,
-            p.title,
-            p.project_type,
-            p.target_wiki,
-            p.status,
-            p.lead_organizer,
-            ", ".join(p.co_organizers or []),
-            p.is_contest,
-            p.created_at.strftime("%Y-%m-%d") if p.created_at else ""
-        ])
-
-    output.seek(0)
-    return Response(
-        output.getvalue(),
-        mimetype="text/csv",
-        headers={"Content-Disposition": "attachment;filename=athar_projects.csv"}
-    )
+    slug = request.args.get("community") or request.args.get("slug")
+    if slug:
+        return exp_community_projects(slug)
+    first_comm = Community.query.order_by(Community.name.asc()).first()
+    if first_comm:
+        return exp_community_projects(first_comm.slug)
+    return jsonify({"error": "يرجى تحديد المجتمع لتصدير التقرير الخاص به."}), 400
 
 # ----------------------------------------------------------------------
 # Scoped Community Endpoints
@@ -220,6 +268,8 @@ def list_slug_project(slug):
             )
         except ValueError:
             query = query.filter_by(target_wiki=target_wiki)
+
+    query, _, _ = _filter_projects_by_date(query, request.args)
 
     projects = query.order_by(Project.created_at.desc()).all()
     return jsonify([p.to_dict() for p in projects]), 200
@@ -444,30 +494,61 @@ def exp_community_projects(slug):
     if target_wiki:
         query = query.filter_by(target_wiki=target_wiki)
 
+    query, start_date, end_date = _filter_projects_by_date(query, request.args)
+
     projects = query.order_by(Project.created_at.desc()).all()
     
     output = io.StringIO()
+    # Write UTF-8 BOM so Excel opens Arabic text without corruption
+    output.write('\ufeff')
     writer = csv.writer(output)
 
-    writer.writerow(["ID", "Title", "Type", "Target Wiki", "Status", "Lead Organizer", "Co-Organizers", "Is Contest", "Created At"])
+    writer.writerow([
+        "المعرف",
+        "عنوان النشاط",
+        "نوع النشاط",
+        "المشروع المستهدف",
+        "رابط المشروع",
+        "الحالة",
+        "المنظم الرئيسي",
+        "المنظمون المشاركون",
+        "مسابقة",
+        "لجنة التحكيم",
+        "تاريخ البدء",
+        "تاريخ الانتهاء",
+        "تاريخ التسجيل"
+    ])
     for p in projects:
         writer.writerow([
             p.id,
             p.title,
             p.project_type,
             p.target_wiki,
+            p.target_wiki_url,
             p.status,
             p.lead_organizer,
             ", ".join(p.co_organizers or []),
-            p.is_contest,
+            "نعم" if p.is_contest else "لا",
+            ", ".join(p.jury_members or []),
+            p.start_date.strftime("%Y-%m-%d") if p.start_date else "",
+            p.end_date.strftime("%Y-%m-%d") if p.end_date else "",
             p.created_at.strftime("%Y-%m-%d") if p.created_at else ""
         ])
+
+    filename = f"athar_{community.slug}_projects.csv"
+    if request.args.get("year") and not request.args.get("month"):
+        filename = f"athar_{community.slug}_projects_{request.args.get('year')}.csv"
+    elif request.args.get("month"):
+        m_str = str(request.args.get("month")).replace("-", "_")
+        filename = f"athar_{community.slug}_projects_{m_str}.csv"
+    elif request.args.get("start_date") or request.args.get("from_date"):
+        filename = f"athar_{community.slug}_projects_custom.csv"
 
     output.seek(0)
     return Response(
         output.getvalue(),
-        mimetype="text/csv",
-        headers={"Content-Disposition": f"attachment;filename=athar_{community.slug}_projects.csv"}
+        mimetype="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f"attachment;filename={filename}"}
     )
 
 

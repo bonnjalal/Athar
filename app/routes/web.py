@@ -378,4 +378,30 @@ def view_project(project_id):
 
 @web_bp.route("/export")
 def export_view():
-    return render_template("export.html")
+    communities = Community.query.order_by(Community.name.asc()).all()
+    selected_slug = request.args.get("community") or session.get("community_slug")
+    if not selected_slug and communities:
+        selected_slug = communities[0].slug
+
+    selected_community = Community.query.filter_by(slug=selected_slug).first() if selected_slug else None
+
+    current_year = datetime.utcnow().year
+    years_set = {current_year, current_year - 1}
+    all_projects = Project.query.all()
+    for p in all_projects:
+        if p.start_date:
+            years_set.add(p.start_date.year)
+        if p.created_at:
+            years_set.add(p.created_at.year)
+
+    available_years = sorted(list(years_set), reverse=True)
+
+    return render_template(
+        "export.html",
+        communities=communities,
+        selected_slug=selected_slug or "",
+        selected_community=selected_community,
+        available_years=available_years,
+        current_year=current_year,
+        current_month=datetime.utcnow().month
+    )

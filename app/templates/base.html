@@ -24,10 +24,12 @@
             <nav class="nav-links">
                 {% if session.get('username') %}
                     <a href="{{ url_for('web.dashboard', slug=community.slug if community else 'wm-ma') }}" class="cdx-button cdx-button--quiet">لوحة التحكم</a>
+                    <a href="{{ url_for('web.export_view', community=community.slug if community else None) }}" class="cdx-button cdx-button--quiet">تصدير التقارير</a>
                     <a href="{{ url_for('web.create_project') }}" class="cdx-button cdx-button--action cdx-button--weight-primary">+ إضافة نشاط</a>
                     <span class="user-greeting">مرحباً، <strong>{{ session.get('username') }}</strong></span>
                     <a href="{{ url_for('oauth.logout') }}" class="cdx-button cdx-button--quiet">تسجيل الخروج</a>
                 {% else %}
+                    <a href="{{ url_for('web.export_view', community=community.slug if community else None) }}" class="cdx-button cdx-button--quiet">تصدير التقارير</a>
                     <a href="{{ url_for('oauth.login') }}" class="cdx-button cdx-button--action cdx-button--weight-primary">تسجيل الدخول عبر ويكيميديا</a>
                 {% endif %}
             </nav>
@@ -51,7 +53,7 @@
     </main>
 
     <footer class="cdx-footer">
-        <p>أثر — أداة مجتمعية مفتوحة المصدر مستضافة على <a href="https://toolforge.org">Wikimedia Toolforge</a>.</p>
+        <p>أثر — أداة مجتمعية مفتوحة المصدر مستضافة على <a href="https://toolforge.org">Wikimedia Toolforge</a>. | <a href="{{ url_for('web.export_view') }}" style="color: #36c;">تصدير التقارير</a></p>
     </footer>
 
     {% block scripts %}{% endblock %}

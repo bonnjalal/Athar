@@ -201,6 +201,65 @@ class TestApiEndpoints(unittest.TestCase):
         res_bad = self.client.get("/api/wm-ma/export?format=json")
         self.assertEqual(res_bad.status_code, 400)
 
+    def test_export_csv_by_year(self):
+        # 2026 matches seeded p1 (start_date=2026-01-10)
+        res = self.client.get("/api/wm-ma/export?format=csv&filter_type=year&year=2026")
+        self.assertEqual(res.status_code, 200)
+        self.assertIn("athar_wm-ma_projects_2026.csv", res.headers.get("Content-Disposition", ""))
+        self.assertIn(b"Wikipedia Workshop", res.data)
+
+        # Non-matching year 2020 should not contain Wikipedia Workshop
+        res_empty = self.client.get("/api/wm-ma/export?format=csv&filter_type=year&year=2020")
+        self.assertEqual(res_empty.status_code, 200)
+        self.assertNotIn(b"Wikipedia Workshop", res_empty.data)
+
+    def test_export_csv_by_month(self):
+        # Month 1 of 2026 matches p1
+        res = self.client.get("/api/wm-ma/export?format=csv&filter_type=month&year=2026&month=1")
+        self.assertEqual(res.status_code, 200)
+        self.assertIn("athar_wm-ma_projects_1.csv", res.headers.get("Content-Disposition", ""))
+        self.assertIn(b"Wikipedia Workshop", res.data)
+
+        # Month 6 of 2026 should not match p1
+        res_other = self.client.get("/api/wm-ma/export?format=csv&filter_type=month&year=2026&month=6")
+        self.assertEqual(res_other.status_code, 200)
+        self.assertNotIn(b"Wikipedia Workshop", res_other.data)
+
+    def test_export_csv_by_custom_range(self):
+        # Range covering 2026-01-10
+        res = self.client.get("/api/wm-ma/export?format=csv&filter_type=custom&start_date=2026-01-01&end_date=2026-01-15")
+        self.assertEqual(res.status_code, 200)
+        self.assertIn("athar_wm-ma_projects_custom.csv", res.headers.get("Content-Disposition", ""))
+        self.assertIn(b"Wikipedia Workshop", res.data)
+
+        # Range outside 2026-01-10
+        res_outside = self.client.get("/api/wm-ma/export?format=csv&filter_type=custom&start_date=2026-02-01&end_date=2026-02-28")
+        self.assertEqual(res_outside.status_code, 200)
+        self.assertNotIn(b"Wikipedia Workshop", res_outside.data)
+
+    def test_export_csv_utf8_bom(self):
+        res = self.client.get("/api/wm-ma/export?format=csv")
+        self.assertEqual(res.status_code, 200)
+        # UTF-8 BOM must be present for Excel compatibility
+        self.assertTrue(res.data.startswith(b'\xef\xbb\xbf'))
+
+    def test_global_export_endpoint_with_community_param(self):
+        res = self.client.get("/api/export?community=wm-ma&filter_type=year&year=2026")
+        self.assertEqual(res.status_code, 200)
+        self.assertIn("athar_wm-ma_projects_2026.csv", res.headers.get("Content-Disposition", ""))
+        self.assertIn(b"Wikipedia Workshop", res.data)
+
+    def test_projects_api_date_filtering(self):
+        # Live preview uses /api/<slug>/projects with date filters
+        res = self.client.get("/api/wm-ma/projects?filter_type=year&year=2026")
+        self.assertEqual(res.status_code, 200)
+        titles = [p["title"] for p in res.get_json()]
+        self.assertIn("Wikipedia Workshop", titles)
+
+        res_none = self.client.get("/api/wm-ma/projects?filter_type=year&year=1999")
+        self.assertEqual(res_none.status_code, 200)
+        self.assertEqual(len(res_none.get_json()), 0)
+
     def test_create_project_with_custom_activity_type(self):
         payload = {
             "title": "Custom Type API Project",

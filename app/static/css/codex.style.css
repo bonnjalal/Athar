@@ -1453,3 +1453,212 @@ body.modal-open {
         color: #e0f2fe;
     }
 }
+
+/* ========================================
+   EXPORT REPORT TOOL
+======================================== */
+
+.export-tool-container {
+    max-width: 860px;
+    margin: 2rem auto;
+    padding: 0 1rem;
+}
+
+.export-header-card {
+    background: #ffffff;
+    border: 1px solid #c8ccd1;
+    border-radius: 12px;
+    padding: 1.75rem 2rem;
+    margin-bottom: 1.5rem;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.export-header-title {
+    margin: 0 0 0.5rem 0;
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: #202122;
+}
+
+.export-header-desc {
+    margin: 0;
+    font-size: 0.95rem;
+    line-height: 1.6;
+    color: #54595d;
+}
+
+.export-form-card {
+    background: #ffffff;
+    border: 1px solid #c8ccd1;
+    border-radius: 12px;
+    padding: 2rem;
+    margin-bottom: 1.5rem;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.export-filter-pills {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    margin-bottom: 1.25rem;
+}
+
+.export-filter-pill {
+    flex: 1;
+    min-width: 130px;
+    padding: 0.65rem 1rem;
+    border: 2px solid #c8ccd1;
+    border-radius: 8px;
+    background: #f8f9fa;
+    color: #202122;
+    cursor: pointer;
+    text-align: center;
+    font-weight: 600;
+    font-size: 0.92rem;
+    font-family: inherit;
+    transition: all 0.15s ease;
+    user-select: none;
+}
+
+.export-filter-pill:hover {
+    border-color: #36c;
+    background: #f0f4fd;
+}
+
+.export-filter-pill.is-active {
+    border-color: #36c;
+    background: #eaf3ff;
+    color: #36c;
+    box-shadow: 0 2px 6px rgba(51, 102, 204, 0.15);
+}
+
+.export-controls-panel {
+    background: #f8f9fa;
+    border: 1px solid #eaecf0;
+    border-radius: 8px;
+    padding: 1.25rem 1.5rem;
+    margin-bottom: 1.75rem;
+}
+
+.export-preview-card {
+    background: #f8f9fa;
+    border: 1px solid #c8ccd1;
+    border-radius: 10px;
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.export-preview-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+}
+
+.export-preview-badge {
+    background: #eaf3ff;
+    color: #36c;
+    font-weight: 600;
+    font-size: 0.85rem;
+    padding: 4px 12px;
+    border-radius: 20px;
+    border: 1px solid rgba(51, 102, 204, 0.2);
+}
+
+.export-preview-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.88rem;
+    background: #ffffff;
+    border-radius: 6px;
+    overflow: hidden;
+    border: 1px solid #eaecf0;
+}
+
+.export-preview-table th {
+    background: #f0f3f6;
+    color: #202122;
+    padding: 10px 14px;
+    text-align: right;
+    font-weight: 600;
+    border-bottom: 1px solid #c8ccd1;
+}
+
+.export-preview-table td {
+    padding: 10px 14px;
+    border-bottom: 1px solid #eaecf0;
+    color: #202122;
+}
+
+.export-preview-table tr:last-child td {
+    border-bottom: none;
+}
+
+.export-actions-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 1rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid #eaecf0;
+}
+
+@media (prefers-color-scheme: dark) {
+    .export-header-card,
+    .export-form-card {
+        background: #1e293b;
+        border-color: #334155;
+    }
+    .export-header-title {
+        color: #f1f5f9;
+    }
+    .export-header-desc {
+        color: #94a3b8;
+    }
+    .export-filter-pill {
+        background: #0f172a;
+        border-color: #334155;
+        color: #e2e8f0;
+    }
+    .export-filter-pill:hover {
+        background: #1e293b;
+        border-color: #38bdf8;
+    }
+    .export-filter-pill.is-active {
+        background: rgba(56, 189, 248, 0.15);
+        border-color: #38bdf8;
+        color: #38bdf8;
+    }
+    .export-controls-panel,
+    .export-preview-card {
+        background: #0f172a;
+        border-color: #334155;
+    }
+    .export-preview-header h4 {
+        color: #f1f5f9 !important;
+    }
+    .export-preview-badge {
+        background: rgba(56, 189, 248, 0.15);
+        color: #38bdf8;
+        border-color: rgba(56, 189, 248, 0.3);
+    }
+    .export-preview-table {
+        background: #1e293b;
+        border-color: #334155;
+    }
+    .export-preview-table th {
+        background: #0f172a;
+        color: #94a3b8;
+        border-bottom-color: #334155;
+    }
+    .export-preview-table td {
+        border-bottom-color: #334155;
+        color: #f1f5f9;
+    }
+    .export-actions-row {
+        border-top-color: #334155;
+    }
+}
