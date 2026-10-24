@@ -371,6 +371,96 @@ class TestRoutesAndSecurity(unittest.TestCase):
         self.assertIn("حسب الشهر".encode("utf-8"), res.data)
         self.assertIn("فترة مخصصة".encode("utf-8"), res.data)
 
+    def test_create_project_with_dates_and_status_auto(self):
+        with self.client.session_transaction() as sess:
+            sess["username"] = "MoroccoVolunteer"
+            sess["is_member"] = True
+
+        # Past activity -> Should be automatically Completed
+        res_past = self.client.post("/project/new", data={
+            "title": "Old Finished Conference",
+            "description": "Conference held in 2021",
+            "project_type": "Workshop",
+            "target_wiki": "arwiki",
+            "start_date": "2021-05-01",
+            "end_date": "2021-05-05",
+            "status": "auto"
+        }, follow_redirects=True)
+        self.assertEqual(res_past.status_code, 200)
+
+        with self.app.app_context():
+            p_past = Project.query.filter_by(title="Old Finished Conference").first()
+            self.assertIsNotNone(p_past)
+            self.assertEqual(str(p_past.start_date), "2021-05-01")
+            self.assertEqual(str(p_past.end_date), "2021-05-05")
+            self.assertEqual(p_past.status, "Completed")
+            self.assertEqual(p_past.status_ar, "مكتملة")
+
+        # Future activity -> Should be automatically Planned
+        res_future = self.client.post("/project/new", data={
+            "title": "Future Summit 2030",
+            "description": "Upcoming Summit",
+            "project_type": "Workshop",
+            "target_wiki": "arwiki",
+            "start_date": "2030-08-10",
+            "end_date": "2030-08-15",
+            "status": "auto"
+        }, follow_redirects=True)
+        self.assertEqual(res_future.status_code, 200)
+
+        with self.app.app_context():
+            p_future = Project.query.filter_by(title="Future Summit 2030").first()
+            self.assertIsNotNone(p_future)
+            self.assertEqual(p_future.status, "Planned")
+            self.assertEqual(p_future.status_ar, "مخططة")
+
+        # Ongoing activity (start_date in past, end_date in future) -> In Progress
+        res_running = self.client.post("/project/new", data={
+            "title": "Ongoing Long Sprint",
+            "description": "Continuous sprint",
+            "project_type": "Workshop",
+            "target_wiki": "arwiki",
+            "start_date": "2026-01-01",
+            "end_date": "2030-01-01",
+            "status": "auto"
+        }, follow_redirects=True)
+        self.assertEqual(res_running.status_code, 200)
+
+        with self.app.app_context():
+            p_running = Project.query.filter_by(title="Ongoing Long Sprint").first()
+            self.assertIsNotNone(p_running)
+            self.assertEqual(p_running.status, "In Progress")
+            self.assertEqual(p_running.status_ar, "جارية")
+
+    def test_project_detail_view_shows_dates(self):
+        with self.app.app_context():
+            comm = Community(name="Community MA", slug="wm-ma", meta_roster_page="Wikimedia_MA/Members")
+            db.session.add(comm)
+            db.session.flush()
+            from datetime import date
+            p = Project(
+                community_id=comm.id,
+                title="Dated Activity Test",
+                description="Testing date rendering",
+                project_type="Workshop",
+                target_wiki="arwiki",
+                start_date=date(2026, 3, 1),
+                end_date=date(2026, 3, 5),
+                status="Completed",
+                lead_organizer="MoroccoVolunteer"
+            )
+            db.session.add(p)
+            db.session.commit()
+            pid = p.id
+
+        res = self.client.get(f"/project/{pid}")
+        self.assertEqual(res.status_code, 200)
+        self.assertIn("2026-03-01".encode("utf-8"), res.data)
+        self.assertIn("2026-03-05".encode("utf-8"), res.data)
+        self.assertIn("تاريخ البدء".encode("utf-8"), res.data)
+        self.assertIn("تاريخ الانتهاء".encode("utf-8"), res.data)
+        self.assertIn("مكتملة".encode("utf-8"), res.data)
+
 if __name__ == "__main__":
     unittest.main()
 

@@ -103,6 +103,43 @@
                    placeholder="مثال: ندوة فكرية، حفل جوائز، بودكاست ويكي، لقاء استراتيجي...">
         </div>
 
+        <!-- Activity Dates & Status -->
+        <div class="form-row" style="margin-bottom: 1.25rem;">
+            <div class="form-group flex-1">
+                <label for="start_date" class="cdx-label">تاريخ البدء</label>
+                <input type="date" id="start_date" name="start_date" class="cdx-text-input"
+                       value="{{ project.start_date.strftime('%Y-%m-%d') if project and project.start_date else '' }}"
+                       onchange="updateCalculatedStatus()" oninput="updateCalculatedStatus()">
+                <div style="font-size: 0.8rem; color: #54595d; margin-top: 4px;">
+                    تاريخ بداية الورشة أو الفعالية
+                </div>
+            </div>
+
+            <div class="form-group flex-1">
+                <label for="end_date" class="cdx-label">تاريخ الانتهاء</label>
+                <input type="date" id="end_date" name="end_date" class="cdx-text-input"
+                       value="{{ project.end_date.strftime('%Y-%m-%d') if project and project.end_date else '' }}"
+                       onchange="updateCalculatedStatus()" oninput="updateCalculatedStatus()">
+                <div style="font-size: 0.8rem; color: #54595d; margin-top: 4px;">
+                    تاريخ ختام النشاط (اختياري)
+                </div>
+            </div>
+
+            <div class="form-group flex-1">
+                <label for="status" class="cdx-label">حالة النشاط</label>
+                <select id="status" name="status" class="cdx-select" onchange="onManualStatusChange(this.value)">
+                    <option value="auto" {% if not project or not project.status %}selected{% endif %}>تحديد تلقائي بحسب التواريخ</option>
+                    <option value="In Progress" {% if project and project.status == 'In Progress' %}selected{% endif %}>جارية</option>
+                    <option value="Planned" {% if project and project.status == 'Planned' %}selected{% endif %}>مخططة</option>
+                    <option value="Completed" {% if project and project.status == 'Completed' %}selected{% endif %}>مكتملة</option>
+                </select>
+                <div id="status-live-container" style="margin-top: 6px; font-size: 0.85rem; display: flex; align-items: center; gap: 6px;">
+                    <span style="color: #54595d;">الحالة المحددة:</span>
+                    <span id="status-live-badge" class="project-status project-status--in-progress">جارية</span>
+                </div>
+            </div>
+        </div>
+
         <div class="form-group">
             <label for="description" class="cdx-label">تفاصيل النشاط </label>
             <textarea id="description" name="description" rows="5" required class="cdx-textarea"
@@ -366,9 +403,85 @@
         });
     }
 
+    function getCalculatedStatus(startDateStr, endDateStr) {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        let start = null;
+        let end = null;
+        if (startDateStr) {
+            const parts = startDateStr.split('-');
+            if (parts.length === 3) {
+                start = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+                start.setHours(0, 0, 0, 0);
+            }
+        }
+        if (endDateStr) {
+            const parts = endDateStr.split('-');
+            if (parts.length === 3) {
+                end = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+                end.setHours(0, 0, 0, 0);
+            }
+        }
+
+        if (end && end < today) {
+            return "Completed";
+        }
+        if (start && start > today) {
+            return "Planned";
+        }
+        if (start && start <= today) {
+            if (end && end < today) {
+                return "Completed";
+            }
+            return "In Progress";
+        }
+        if (end && end >= today) {
+            return "In Progress";
+        }
+
+        return "In Progress";
+    }
+
+    function updateCalculatedStatus() {
+        const startVal = document.getElementById('start_date')?.value || '';
+        const endVal = document.getElementById('end_date')?.value || '';
+        const statusSelect = document.getElementById('status');
+        const badge = document.getElementById('status-live-badge');
+
+        const calculated = getCalculatedStatus(startVal, endVal);
+
+        let currentStatus = calculated;
+        if (statusSelect && statusSelect.value !== 'auto') {
+            currentStatus = statusSelect.value;
+        }
+
+        if (badge) {
+            const labels = {
+                'In Progress': 'جارية',
+                'Planned': 'مخططة',
+                'Completed': 'مكتملة'
+            };
+            const classNames = {
+                'In Progress': 'project-status project-status--in-progress',
+                'Planned': 'project-status project-status--planned',
+                'Completed': 'project-status project-status--completed'
+            };
+
+            badge.textContent = labels[currentStatus] || currentStatus;
+            badge.className = classNames[currentStatus] || 'project-status';
+        }
+    }
+
+    function onManualStatusChange(val) {
+        updateCalculatedStatus();
+    }
+
     document.addEventListener('DOMContentLoaded', () => {
         const input = document.getElementById('target_wiki');
         if (input && input.value) previewWikiLink(input.value);
+
+        updateCalculatedStatus();
 
         setupChipInput({
             containerId: 'co_orgs_container',

@@ -350,6 +350,10 @@ def create_projetct(slug):
             end_date_val = datetime.strptime(data["end_date"], "%Y-%m-%d").date()
         except ValueError:
             pass
+
+    raw_status = data.get("status")
+    from app.wiki_utils import determine_project_status
+    status = determine_project_status(start_date_val, end_date_val, raw_status)
         
     new_project = Project(
         community_id=community.id,
@@ -428,8 +432,6 @@ def update_project(project_id, slug=None):
             project.target_wiki = target_wiki
         except ValueError as err:
             return jsonify({"error": str(err)}), 400
-    if "status" in data:
-        project.status = data["status"]
 
     if "is_contest" in data:
         project.is_contest = bool(data["is_contest"])
@@ -465,6 +467,14 @@ def update_project(project_id, slug=None):
                 pass
         else:
             project.end_date = None
+
+    if "status" in data:
+        raw_status = data["status"]
+        from app.wiki_utils import determine_project_status
+        project.status = determine_project_status(project.start_date, project.end_date, raw_status)
+    elif "start_date" in data or "end_date" in data:
+        from app.wiki_utils import determine_project_status
+        project.status = determine_project_status(project.start_date, project.end_date, "auto")
 
     db.session.commit()
     return jsonify({

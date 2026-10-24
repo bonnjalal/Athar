@@ -119,6 +119,16 @@ def dashboard(slug):
     # Save active community slug in session for oauth redirects
     session['community_slug'] = community.slug
 
+    # Sync project statuses with current date
+    all_comm_projects = Project.query.filter_by(community_id=community.id).all()
+    status_changed = False
+    for p in all_comm_projects:
+        old_st = p.status
+        if p.sync_status_with_dates() != old_st:
+            status_changed = True
+    if status_changed:
+        db.session.commit()
+
     # Keep only in-progress activities on the main overview page
     in_progress_projects = Project.query.filter_by(
         community_id=community.id,
@@ -156,6 +166,14 @@ def community_activities(slug):
     session['community_slug'] = community.slug
 
     projects = Project.query.filter_by(community_id=community.id).order_by(Project.created_at.desc()).all()
+    status_changed = False
+    for p in projects:
+        old_st = p.status
+        if p.sync_status_with_dates() != old_st:
+            status_changed = True
+    if status_changed:
+        db.session.commit()
+
     total_projects = len(projects)
     total_members = CommunityMember.query.filter_by(community_id=community.id).count()
 
@@ -243,7 +261,25 @@ def create_project():
             flash(str(err), "error")
             return render_template("project_form.html", project=None, communities=communities, selected_community_slug=session.get("community_slug")), 400
 
-        status = request.form.get("status", "In Progress")
+        start_date_val = None
+        end_date_val = None
+        raw_start = (request.form.get("start_date") or "").strip()
+        raw_end = (request.form.get("end_date") or "").strip()
+        if raw_start:
+            try:
+                start_date_val = datetime.strptime(raw_start, "%Y-%m-%d").date()
+            except ValueError:
+                pass
+        if raw_end:
+            try:
+                end_date_val = datetime.strptime(raw_end, "%Y-%m-%d").date()
+            except ValueError:
+                pass
+
+        raw_status = (request.form.get("status") or "auto").strip()
+        from app.wiki_utils import determine_project_status
+        status = determine_project_status(start_date_val, end_date_val, raw_status)
+
         co_orgs_raw = request.form.get("co_organizers", "")
         is_contest = bool(request.form.get("is_contest"))
         jury_raw = request.form.get("jury_members", "")
@@ -286,6 +322,8 @@ def create_project():
             project_type=project_type,
             target_wiki=target_wiki,
             status=status,
+            start_date=start_date_val,
+            end_date=end_date_val,
             lead_organizer=username or "MoroccoVolunteer",
             co_organizers=co_organizers,
             is_contest=is_contest,
@@ -331,7 +369,27 @@ def edit_project(project_id):
         except ValueError as err:
             flash(str(err), "error")
             return render_template("project_form.html", project=project, communities=communities, selected_community_slug=project.community.slug if project.community else session.get("community_slug")), 400
-        project.status = request.form.get("status", project.status)
+        raw_start = (request.form.get("start_date") or "").strip()
+        raw_end = (request.form.get("end_date") or "").strip()
+        if raw_start:
+            try:
+                project.start_date = datetime.strptime(raw_start, "%Y-%m-%d").date()
+            except ValueError:
+                pass
+        else:
+            project.start_date = None
+
+        if raw_end:
+            try:
+                project.end_date = datetime.strptime(raw_end, "%Y-%m-%d").date()
+            except ValueError:
+                pass
+        else:
+            project.end_date = None
+
+        raw_status = (request.form.get("status") or "auto").strip()
+        from app.wiki_utils import determine_project_status
+        project.status = determine_project_status(project.start_date, project.end_date, raw_status)
         project.is_contest = bool(request.form.get("is_contest"))
 
         community_id = request.form.get("community_id")
