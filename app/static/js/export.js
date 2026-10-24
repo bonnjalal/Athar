@@ -26,7 +26,7 @@ async function chargeComm() {
 
         const placeholder = document.createElement("option");
         placeholder.value = "";
-        placeholder.textContent = "Choose a community";
+        placeholder.textContent = "اختر المجتمع";
         communitiesSelect.appendChild(placeholder);
 
         communities.forEach((community) => {

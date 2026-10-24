@@ -1,16 +1,16 @@
 {% extends "base.html" %}
 
-{% block title %}Athar Project — Home{% endblock %}
+{% block title %}مشروع أثر — الرئيسية{% endblock %}
 
 {% block content %}
 <div class="cdx-hero-container" style="text-align: center; padding: 2.5rem 1rem; max-width: 820px; margin: 0 auto;">
     <!-- Athar Hero Logo -->
     <div class="cdx-logo-wrapper" style="margin-bottom: 1.5rem;">
-        <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Athar Logo" style="max-height: 140px; width: auto; object-fit: contain;">
+        <img src="{{ url_for('static', filename='images/logo.png') }}" alt="شعار أثر" style="max-height: 140px; width: auto; object-fit: contain;">
     </div>
 
     <!-- Project Description -->
-    <h1 style="font-size: 1.85rem; margin-bottom: 0.8rem; color: #202122; font-weight: 700;">مشروع أثر (Athar)</h1>
+    <h1 style="font-size: 1.85rem; margin-bottom: 0.8rem; color: #202122; font-weight: 700;">مشروع أثر</h1>
     <p style="font-size: 1.05rem; line-height: 1.8; color: #54595d; margin-bottom: 2rem;">
         لوحة قيادة ويب عالية الأداء مستضافة على منصة Toolforge تتولى تجميع مقاييس وإحصائيات التحرير للمجموعات الشقيقة وأعضاء مجتمع ويكيميديا تلقائياً عبر مهام مجدولة تعمل في الخلفية، وتتيح للأعضاء المعتمدين تسجيل وإدارة واستعراض المشاريع المجتمعية الجارية.
     </p>
@@ -30,7 +30,7 @@
                     type="text" 
                     id="community-search-input" 
                     class="cdx-text-input community-search-input" 
-                    placeholder="ابحث عن مجتمع بالاسم أو المعرّف... (Search communities)" 
+                    placeholder="ابحث عن مجتمع بالاسم أو المعرّف..." 
                     oninput="filterCommunities()"
                     autocomplete="off"
                 />
@@ -95,10 +95,10 @@
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
 
                         <div class="form-group" style="text-align: right; margin-bottom: 1rem;">
-                            <label for="community-name" class="cdx-label" style="font-weight: 600; display: block; margin-bottom: 0.35rem;">اسم المجتمع (Community Name) *</label>
+                            <label for="community-name" class="cdx-label" style="font-weight: 600; display: block; margin-bottom: 0.35rem;">اسم المجتمع *</label>
                             <input type="text" id="community-name" name="community_name" class="cdx-text-input" 
                                    style="width: 100%; padding: 0.6rem; border: 1px solid #a2a9b1; border-radius: 4px;" 
-                                   placeholder="مثال: Wikimedia Morocco أو مجموعة مستخدمي ويكيميديا الجزائر" 
+                                   placeholder="مثال: ويكيميديا المغرب أو مجموعة مستخدمي ويكيميديا الجزائر" 
                                    value="{{ pending_name or '' }}" required>
                         </div>
 
@@ -127,7 +127,7 @@
                             يجب تسجيل الدخول بحساب ويكيميديا الخاص بك لتتمكن من إضافة مجتمعات جديدة إلى قاعدة البيانات.
                         </p>
                         <a href="{{ url_for('oauth.login') }}" class="cdx-button cdx-button--action cdx-button--weight-primary" style="text-decoration: none; display: inline-block;">
-                            تسجيل الدخول بـ Wikimedia
+                            تسجيل الدخول عبر ويكيميديا
                         </a>
                     </div>
                 {% endif %}

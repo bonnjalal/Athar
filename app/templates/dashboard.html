@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}{{ community.name if community else 'Wikimedia' }} — Athar{% endblock %}
+{% block title %}{{ community.name if community else 'ويكيميديا' }} — أثر{% endblock %}
 
 {% block content %}
 <div class="dashboard-charts" data-community-slug="{{ community.slug }}" data-community-name="{{ community.name }}">
@@ -54,7 +54,7 @@
     <div class="in-progress-section" style="background: #ffffff; border: 1px solid #c8ccd1; border-radius: 8px; padding: 1.5rem; margin-bottom: 2rem;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 0.75rem;">
             <div>
-                <h3 style="margin: 0 0 0.25rem 0; font-size: 1.25rem; color: #202122;">أنشطة جارية حالياً (In Progress)</h3>
+                <h3 style="margin: 0 0 0.25rem 0; font-size: 1.25rem; color: #202122;">أنشطة جارية حالياً</h3>
                 <p style="margin: 0; font-size: 0.85rem; color: #54595d;">الأنشطة والورشات والمنافسات النشطة حالياً في المجتمع.</p>
             </div>
             <a href="{{ url_for('web.community_activities', slug=community.slug) }}" class="cdx-button cdx-button--action">
@@ -69,7 +69,7 @@
                         <div>
                             <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.75rem; gap: 0.5rem; flex-wrap: wrap;">
                                 <span class="project-type-badge" style="background: #eaf3ff; color: #36c; font-size: 0.78rem; font-weight: 600; padding: 3px 8px; border-radius: 4px;">{{ proj.project_type }}</span>
-                                <span class="project-status project-status--in-progress" style="background: #dcfce7; color: #15803d; font-size: 0.78rem; font-weight: 600; padding: 3px 8px; border-radius: 4px;">جارية (In Progress)</span>
+                                <span class="project-status project-status--in-progress" style="background: #dcfce7; color: #15803d; font-size: 0.78rem; font-weight: 600; padding: 3px 8px; border-radius: 4px;">جارية</span>
                             </div>
                             <h4 style="margin: 0 0 0.5rem 0; font-size: 1.1rem; color: #202122;">
                                 <a href="{{ url_for('web.view_project', project_id=proj.id) }}" style="color: inherit; text-decoration: none;">{{ proj.title }}</a>

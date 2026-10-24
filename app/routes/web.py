@@ -53,7 +53,7 @@ def add_community():
         session['pending_community_name'] = request.form.get("community_name", "").strip()
         session['pending_community_link'] = request.form.get("community_link", "").strip()
         
-        flash("You must log in with your Wikimedia account before adding a community.", "error")
+        flash("يجب تسجيل الدخول بحساب ويكيميديا الخاص بك قبل إضافة مجتمع جديد.", "error")
         return redirect(url_for("oauth.login"))
 
     name = request.form.get("community_name", "").strip()
@@ -61,7 +61,7 @@ def add_community():
     contact_email = request.form.get("contact_email", "").strip() or None
 
     if not name or not link:
-        flash("Please provide both a community name and a valid Wikimedia link.", "error")
+        flash("يرجى إدخال كل من اسم المجتمع ورابط صفحة ويكيميديا الصالح.", "error")
         return redirect(url_for("web.index"))
 
     base_slug = slugify(name)
@@ -71,7 +71,7 @@ def add_community():
     # Check if community with same name already exists
     existing = Community.query.filter_by(name=name).first()
     if existing:
-        flash(f"Community '{name}' already exists in the database.", "info")
+        flash(f"المجتمع '{name}' مسجل مسبقاً في قاعدة البيانات.", "info")
         return redirect(url_for("web.dashboard", slug=existing.slug))
 
     # Ensure unique slug
@@ -98,11 +98,11 @@ def add_community():
         session.pop('pending_community_name', None)
         session.pop('pending_community_link', None)
 
-        flash(f"Community '{name}' added successfully to the database! Syncing member roster...", "success")
+        flash(f"تمت إضافة المجتمع '{name}' بنجاح إلى قاعدة البيانات! جاري مزامنة قائمة الأعضاء...", "success")
         return redirect(url_for("web.dashboard", slug=new_community.slug))
     except Exception as e:
         db.session.rollback()
-        flash(f"Error adding community: {str(e)}", "error")
+        flash(f"حدث خطأ أثناء إضافة المجتمع: {str(e)}", "error")
         return redirect(url_for("web.index"))
 
 
@@ -113,7 +113,7 @@ def dashboard(slug):
 
     community = Community.query.filter_by(slug=slug).first()
     if not community:
-        flash(f"Community '{slug}' not found.", "error")
+        flash(f"المجتمع '{slug}' غير موجود.", "error")
         return redirect(url_for("web.index"))
 
     # Save active community slug in session for oauth redirects
@@ -293,7 +293,7 @@ def create_project():
         )
         db.session.add(new_project)
         db.session.commit()
-        flash("Project activity created successfully!", "success")
+        flash("تم إنشاء وحفظ النشاط المجتمعي بنجاح!", "success")
 
         target_comm = db.session.get(Community, community_id) if community_id else None
         if target_comm:
@@ -348,7 +348,7 @@ def edit_project(project_id):
         project.jury_members = [j.strip() for j in jury_raw.split(",") if j.strip()] if project.is_contest else []
 
         db.session.commit()
-        flash("Project updated successfully!", "success")
+        flash("تم تحديث بيانات النشاط بنجاح!", "success")
 
         if project.community:
             return redirect(url_for("web.dashboard", slug=project.community.slug))

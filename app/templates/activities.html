@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}الأنشطة — {{ community.name if community else 'Wikimedia' }} — Athar{% endblock %}
+{% block title %}الأنشطة — {{ community.name if community else 'ويكيميديا' }} — أثر{% endblock %}
 
 {% block content %}
 <div class="dashboard-charts" data-community-slug="{{ community.slug }}" data-community-name="{{ community.name }}">
@@ -39,29 +39,29 @@
             <div class="filter-field-group">
                 <label for="activity-type" class="cdx-label">نوع النشاط</label>
                 <select id="activity-type" class="cdx-select">
-                    <option value="">جميع أنواع الأنشطة (All types)</option>
-                    <option value="Workshop">ورشات تدريبية (Workshops)</option>
-                    <option value="Edit-a-thon">ماراثونات تحرير (Edit-a-thons)</option>
-                    <option value="Photo Walk">جولات تصوير (Photo Walks)</option>
-                    <option value="Contest">مسابقات ومنافسات (Contests)</option>
-                    <option value="GLAM">شراكات ثقافية (GLAM Partnerships)</option>
-                    <option value="Education Program">برامج تعليمية (Education Programs)</option>
-                    <option value="Campaign">حملات محتوى (Campaigns)</option>
-                    <option value="Conference / Meetup">مؤتمرات ولقاءات (Conferences / Meetups)</option>
-                    <option value="Hackathon">هاكاثونات وفعاليات برمجية (Hackathons)</option>
-                    <option value="Translation">حملات ترجمة (Translations)</option>
-                    <option value="Exhibition">معارض وتوثيق (Exhibitions)</option>
-                    <option value="Other">أنشطة أخرى مخصصة (Other Activities)</option>
+                    <option value="">جميع أنواع الأنشطة</option>
+                    <option value="Workshop">ورشات تدريبية</option>
+                    <option value="Edit-a-thon">ماراثونات تحرير</option>
+                    <option value="Photo Walk">جولات تصوير</option>
+                    <option value="Contest">مسابقات ومنافسات</option>
+                    <option value="GLAM">شراكات ثقافية</option>
+                    <option value="Education Program">برامج تعليمية</option>
+                    <option value="Campaign">حملات محتوى</option>
+                    <option value="Conference / Meetup">مؤتمرات ولقاءات</option>
+                    <option value="Hackathon">فعاليات برمجية وهاكاثونات</option>
+                    <option value="Translation">حملات ترجمة</option>
+                    <option value="Exhibition">معارض وتوثيق</option>
+                    <option value="Other">أنشطة أخرى مخصصة</option>
                 </select>
             </div>
 
             <div class="filter-field-group">
                 <label for="project-status" class="cdx-label">حالة النشاط</label>
                 <select id="project-status" class="cdx-select">
-                    <option value="">جميع الحالات (All statuses)</option>
-                    <option value="In Progress">جارية (In Progress)</option>
-                    <option value="Planned">مخططة (Planned)</option>
-                    <option value="Completed">مكتملة (Completed)</option>
+                    <option value="">جميع الحالات</option>
+                    <option value="In Progress">جارية</option>
+                    <option value="Planned">مخططة</option>
+                    <option value="Completed">مكتملة</option>
                 </select>
             </div>
 
@@ -160,7 +160,7 @@
             </div>
 
             <div class="project-modal-footer">
-                <a id="modal-edit-link" href="#" class="cdx-button cdx-button--action cdx-button--weight-primary">تعديل النشاط (Edit)</a>
+                <a id="modal-edit-link" href="#" class="cdx-button cdx-button--action cdx-button--weight-primary">تعديل النشاط</a>
                 <a id="modal-direct-link" href="#" class="cdx-button cdx-button--quiet" target="_blank" rel="noopener">فتح في صفحة مستقلة</a>
                 <button type="button" class="cdx-button" id="modal-footer-close-btn">إغلاق</button>
             </div>

@@ -55,7 +55,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const communitySlug = getCommunitySlug();
 
         if (!communitySlug) {
-            showError("Community slug not found in URL.");
+            showError("معرّف المجتمع غير محدد في الرابط.");
 
             if (membersElement) membersElement.textContent = "—";
             if (projectsElement) projectsElement.textContent = "—";
@@ -98,6 +98,25 @@ document.addEventListener("DOMContentLoaded", () => {
             const activityLabels = Object.keys(activities);
             const activityValues = Object.values(activities);
 
+            const activityLabelsArabic = {
+                "Workshop": "ورشات تدريبية",
+                "Edit-a-thon": "ماراثونات تحرير",
+                "Photo Walk": "جولات تصوير",
+                "Contest": "مسابقات",
+                "Contest / Competition": "مسابقات",
+                "GLAM": "شراكات ثقافية",
+                "Education Program": "برامج تعليمية",
+                "Outreach": "برامج توعوية",
+                "Campaign": "حملات محتوى",
+                "Conference / Meetup": "مؤتمرات ولقاءات",
+                "Hackathon": "فعاليات برمجية",
+                "Translation": "حملات ترجمة",
+                "Exhibition": "معارض",
+                "Other": "أخرى"
+            };
+
+            const displayLabels = activityLabels.map(l => activityLabelsArabic[l] || l);
+
             const activityColors = {
                 "Workshop": "#10b981",
                 "Edit-a-thon": "#06b6d4",
@@ -123,9 +142,9 @@ document.addEventListener("DOMContentLoaded", () => {
                 activityChart = new Chart(activityCanvas, {
                     type: "bar",
                     data: {
-                        labels: activityLabels,
+                        labels: displayLabels,
                         datasets: [{
-                            label: "Number of projects",
+                            label: "عدد الأنشطة",
                             data: activityValues,
                             backgroundColor: activityLabels.map(
                                 label => activityColors[label] || "#64748b"
@@ -163,7 +182,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 overviewChart = new Chart(overviewCanvas, {
                     type: "doughnut",
                     data: {
-                        labels: ["Community members", "Projects"],
+                        labels: ["أعضاء المجتمع", "الأنشطة"],
                         datasets: [{
                             data: [
                                 stats.total_community_member ?? 0,
@@ -181,7 +200,7 @@ document.addEventListener("DOMContentLoaded", () => {
             }
         } catch (error) {
             console.error("Dashboard stats error:", error);
-            showError("Could not load dashboard statistics.");
+            showError("تعذر تحميل إحصائيات لوحة القيادة.");
         }
     }
 

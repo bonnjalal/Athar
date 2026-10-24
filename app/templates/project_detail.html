@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}{{ project.title }} — Athar{% endblock %}
+{% block title %}{{ project.title }} — أثر{% endblock %}
 
 {% block content %}
 <div class="project-detail-container" style="max-width: 900px; margin: 2rem auto; padding: 0 1rem;">
@@ -32,7 +32,7 @@
             <div style="display: flex; gap: 0.75rem; align-items: center;">
                 {% if can_edit %}
                     <a href="{{ url_for('web.edit_project', project_id=project.id) }}" class="cdx-button cdx-button--action cdx-button--weight-primary">
-                        تعديل النشاط (Edit)
+                        تعديل النشاط
                     </a>
                 {% endif %}
                 {% if community %}

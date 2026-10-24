@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}الأعضاء — {{ community.name if community else 'Wikimedia' }} — Athar{% endblock %}
+{% block title %}الأعضاء — {{ community.name if community else 'ويكيميديا' }} — أثر{% endblock %}
 
 {% block content %}
 <div class="community-users-view" data-community-slug="{{ community.slug }}" data-community-name="{{ community.name }}">
@@ -52,7 +52,7 @@
             <thead>
                 <tr>
                     <th style="width: 50px; text-align: center;">#</th>
-                    <th>اسم المستخدم (Wikimedia Username)</th>
+                    <th>اسم المستخدم</th>
                     <th>الدور في المجتمع</th>
                     <th>إجمالي التعديلات</th>
                     <th>المشروع الرئيسي</th>

@@ -61,16 +61,38 @@ document.addEventListener("DOMContentLoaded", () => {
         const title = project.title || project.name || "مشروع بدون عنوان";
         if (titleEl) titleEl.textContent = title;
 
-        const pType = project.project_type || project.type || "نشاط مجتمعي";
-        if (typeEl) {
-            typeEl.textContent = pType;
-            typeEl.style.display = "inline-block";
+        const statusMap = {
+            "in progress": "جارية",
+            "planned": "مخططة",
+            "completed": "مكتملة"
+        };
+        const rawStatus = project.status || "In Progress";
+        const statusDisplay = statusMap[rawStatus.toLowerCase()] || rawStatus;
+        if (statusEl) {
+            statusEl.textContent = statusDisplay;
+            statusEl.className = `project-status project-status--${rawStatus.toLowerCase().replace(/\s+/g, "-")}`;
         }
 
-        const pStatus = project.status || "In Progress";
-        if (statusEl) {
-            statusEl.textContent = pStatus;
-            statusEl.className = `project-status project-status--${pStatus.toLowerCase().replace(/\s+/g, "-")}`;
+        const typeMap = {
+            "workshop": "ورشة تدريبية",
+            "edit-a-thon": "ماراثون تحرير",
+            "photo walk": "جولة تصوير",
+            "contest": "مسابقة ومنافسة",
+            "glam": "شراكة ثقافية",
+            "education program": "برنامج تعليمي",
+            "outreach": "برنامج توعوي",
+            "campaign": "حملة محتوى",
+            "conference / meetup": "مؤتمر أو لقاء",
+            "hackathon": "فعالية برمجية",
+            "translation": "حملة ترجمة",
+            "exhibition": "معرض وتوثيق",
+            "other": "نشاط مخصص"
+        };
+        const rawType = project.project_type || project.type || "نشاط مجتمعي";
+        const typeDisplay = typeMap[rawType.toLowerCase()] || rawType;
+        if (typeEl) {
+            typeEl.textContent = typeDisplay;
+            typeEl.style.display = "inline-block";
         }
 
     const WIKI_MAP = {
@@ -199,7 +221,7 @@ function displayProjects(projects) {
     results.replaceChildren();
 
     if (projects.length === 0) {
-        results.textContent = "No projects found.";
+        results.textContent = "لم يتم العثور على أي أنشطة تطابق معايير التصفية.";
         return;
     }
 
@@ -216,20 +238,42 @@ function displayProjects(projects) {
         const title = document.createElement("h3");
         title.className = "project-card-title";
         title.textContent =
-            project.title || project.name || project.project || "Untitled project";
+            project.title || project.name || project.project || "نشاط بدون عنوان";
 
         const badges = document.createElement("div");
         badges.className = "project-badges-wrap";
 
         const status = document.createElement("span");
-        const statusText = project.status || "In Progress";
-        status.className = `project-status project-status--${statusText.toLowerCase().replace(/\s+/g, "-")}`;
-        status.textContent = statusText;
+        const statusMap = {
+            "in progress": "جارية",
+            "planned": "مخططة",
+            "completed": "مكتملة"
+        };
+        const rawStatus = project.status || "In Progress";
+        const statusDisplay = statusMap[rawStatus.toLowerCase()] || rawStatus;
+        status.className = `project-status project-status--${rawStatus.toLowerCase().replace(/\s+/g, "-")}`;
+        status.textContent = statusDisplay;
         badges.appendChild(status);
 
         const project_type = document.createElement("span");
         project_type.className = "project-type-badge";
-        project_type.textContent = project.project_type || project.type || "Activity";
+        const typeMap = {
+            "workshop": "ورشة تدريبية",
+            "edit-a-thon": "ماراثون تحرير",
+            "photo walk": "جولة تصوير",
+            "contest": "مسابقة ومنافسة",
+            "glam": "شراكة ثقافية",
+            "education program": "برنامج تعليمي",
+            "outreach": "برنامج توعوي",
+            "campaign": "حملة محتوى",
+            "conference / meetup": "مؤتمر أو لقاء",
+            "hackathon": "فعالية برمجية",
+            "translation": "حملة ترجمة",
+            "exhibition": "معرض وتوثيق",
+            "other": "نشاط مخصص"
+        };
+        const rawType = project.project_type || project.type || "نشاط مجتمعي";
+        project_type.textContent = typeMap[rawType.toLowerCase()] || rawType;
         badges.appendChild(project_type);
 
         if (project.is_contest) {
@@ -248,7 +292,7 @@ function displayProjects(projects) {
             project.community_name ||
             project.community ||
             communitySelect.selectedOptions[0]?.textContent ||
-            "Unknown";
+            "غير محدد";
         community.textContent = `المجتمع: ${commName}`;
         meta.appendChild(community);
 
@@ -306,7 +350,7 @@ function displayProjects(projects) {
         }
 
         communitySelect.replaceChildren(
-            new Option("Choose a community", "")
+            new Option("اختر المجتمع", "")
         );
 
         communities.forEach(community => {
@@ -325,11 +369,11 @@ function displayProjects(projects) {
         displayProjects([]);
 
         if (!slug) {
-            results.textContent = "Choose a community to display its projects.";
+            results.textContent = "اختر المجتمع لعرض أنشطته.";
             return;
         }
 
-        results.textContent = "Loading projects...";
+        results.textContent = "جاري تحميل الأنشطة...";
 
         try {
             const response = await fetch(
@@ -357,7 +401,7 @@ function displayProjects(projects) {
         } catch (error) {
             if (currentRequest === requestId) {
                 console.error(error);
-                results.textContent = `Error: ${error.message}`;
+                results.textContent = `حدث خطأ أثناء تحميل البيانات: ${error.message}`;
             }
         }
     }
@@ -473,11 +517,11 @@ function applyFilters() {
             if (communitySelect.value) {
                 loadProjects();
             } else {
-                results.textContent = "Choose a community to display its projects.";
+                results.textContent = "اختر المجتمع لعرض أنشطته.";
             }
         })
         .catch(error => {
             console.error(error);
-            results.textContent = "Could not load communities.";
+            results.textContent = "تعذر تحميل قائمة المجتمعات.";
         });
 });

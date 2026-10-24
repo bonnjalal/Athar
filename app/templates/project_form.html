@@ -30,49 +30,49 @@
 
         <div class="form-row">
             <div class="form-group flex-1">
-                <label for="project_type" class="cdx-label">نوع النشاط (Activity Type)</label>
+                <label for="project_type" class="cdx-label">نوع النشاط</label>
                 <select id="project_type" name="project_type" class="cdx-select" onchange="handleProjectTypeChange(this.value)">
                     <option value="Workshop" {% if not project or project.project_type == 'Workshop' %}selected{% endif %}>
-                        ورشة تدريبية (Workshop)
+                        ورشة تدريبية
                     </option>
                     <option value="Edit-a-thon" {% if project and project.project_type == 'Edit-a-thon' %}selected{% endif %}>
-                        ماراثون تحرير (Edit-a-thon)
+                        ماراثون تحرير
                     </option>
                     <option value="Photo Walk" {% if project and project.project_type == 'Photo Walk' %}selected{% endif %}>
-                        جولة تصوير (Photo Walk)
+                        جولة تصوير
                     </option>
                     <option value="Contest" {% if project and (project.project_type == 'Contest' or 'Contest' in project.project_type or 'مسابقة' in project.project_type) %}selected{% endif %}>
-                        مسابقة / منافسة (Contest / Competition)
+                        مسابقة / منافسة
                     </option>
                     <option value="GLAM" {% if project and project.project_type == 'GLAM' %}selected{% endif %}>
-                        شراكة ثقافية (GLAM Partnership)
+                        شراكة ثقافية
                     </option>
                     <option value="Education Program" {% if project and (project.project_type == 'Education Program' or project.project_type == 'Outreach') %}selected{% endif %}>
-                        برنامج تعليمي / شراكة جامعية (Education / Outreach)
+                        برنامج تعليمي / شراكة جامعية
                     </option>
                     <option value="Campaign" {% if project and project.project_type == 'Campaign' %}selected{% endif %}>
-                        حملة محتوى (Content Campaign e.g. #1Lib1Ref, WikiGap)
+                        حملة محتوى
                     </option>
                     <option value="Conference / Meetup" {% if project and project.project_type == 'Conference / Meetup' %}selected{% endif %}>
-                        مؤتمر أو لقاء مجتمعي (Conference / Meetup)
+                        مؤتمر أو لقاء مجتمعي
                     </option>
                     <option value="Hackathon" {% if project and project.project_type == 'Hackathon' %}selected{% endif %}>
-                        فعالية برمجية / هاكاثون (Hackathon / Tech Event)
+                        فعالية برمجية / هاكاثون
                     </option>
                     <option value="Translation" {% if project and project.project_type == 'Translation' %}selected{% endif %}>
-                        حملة ترجمة (Translation Sprint)
+                        حملة ترجمة
                     </option>
                     <option value="Exhibition" {% if project and project.project_type == 'Exhibition' %}selected{% endif %}>
-                        معرض وتوثيق (Exhibition / Showcase)
+                        معرض وتوثيق
                     </option>
                     <option value="Other" {% if project and project.project_type not in ['Workshop', 'Edit-a-thon', 'Photo Walk', 'Contest', 'GLAM', 'Education Program', 'Outreach', 'Campaign', 'Conference / Meetup', 'Hackathon', 'Translation', 'Exhibition'] %}selected{% endif %}>
-                        أخرى - تحديد يدوي (Other / Custom Activity)...
+                        أخرى - تحديد يدوي...
                     </option>
                 </select>
             </div>
 
             <div class="form-group flex-1">
-                <label for="target_wiki" class="cdx-label">رمز مشروع ويكيميديا (Target Wiki Code)</label>
+                <label for="target_wiki" class="cdx-label">رمز مشروع ويكيميديا</label>
                 <input type="text" id="target_wiki" name="target_wiki" class="cdx-text-input" list="wikis-list"
                     value="{{ project.target_wiki if project else 'arwiki' }}"
                     placeholder="مثال: arwiki, commons, wikidata, arywiki"
@@ -83,8 +83,8 @@
                     <option value="commons">ويكيميديا كومنز (commons.wikimedia.org)</option>
                     <option value="wikidata">ويكي بيانات (wikidata.org)</option>
                     <option value="metawiki">ميتا-ويكي (meta.wikimedia.org)</option>
-                    <option value="enwiki">Wikipedia English (en.wikipedia.org)</option>
-                    <option value="frwiki">Wikipédia Français (fr.wikipedia.org)</option>
+                    <option value="enwiki">ويكيبيديا الإنجليزية (en.wikipedia.org)</option>
+                    <option value="frwiki">ويكيبيديا الفرنسية (fr.wikipedia.org)</option>
                     <option value="zghwiki">ويكيبيديا الأمازيغية (zgh.wikipedia.org)</option>
                     <option value="shiwiki">ويكيبيديا الشلحية (shi.wikipedia.org)</option>
                     <option value="arwikisource">ويكي مصدر العربي (ar.wikisource.org)</option>
@@ -97,7 +97,7 @@
 
         <!-- Custom Activity Type Field (revealed when 'Other' is chosen or for custom types) -->
         <div class="form-group" id="custom-activity-group" style="display: {% if project and project.project_type not in ['Workshop', 'Edit-a-thon', 'Photo Walk', 'Contest', 'GLAM', 'Education Program', 'Outreach', 'Campaign', 'Conference / Meetup', 'Hackathon', 'Translation', 'Exhibition'] %}block{% else %}none{% endif %}; margin-bottom: 1rem;">
-            <label for="custom_project_type" class="cdx-label">اكتب نوع النشاط المخصص (Custom Activity Name)</label>
+            <label for="custom_project_type" class="cdx-label">اكتب نوع النشاط المخصص</label>
             <input type="text" id="custom_project_type" name="custom_project_type" class="cdx-text-input"
                    value="{% if project and project.project_type not in ['Workshop', 'Edit-a-thon', 'Photo Walk', 'Contest', 'GLAM', 'Education Program', 'Outreach', 'Campaign', 'Conference / Meetup', 'Hackathon', 'Translation', 'Exhibition'] %}{{ project.project_type }}{% endif %}"
                    placeholder="مثال: ندوة فكرية، حفل جوائز، بودكاست ويكي، لقاء استراتيجي...">
@@ -110,7 +110,7 @@
         </div>
 
         <div class="form-group">
-            <label class="cdx-label">منظمون مشاركون (Co-organizers)</label>
+            <label class="cdx-label">منظمون مشاركون</label>
             <div class="cdx-chip-input-container" id="co_orgs_container">
                 <div class="cdx-chips-list" id="co_orgs_chips" style="display: contents;"></div>
                 <input type="text" class="cdx-chip-inline-input" id="co_orgs_input" placeholder="اسم المستخدم في ويكيميديا واضغط Enter للإضافة...">
@@ -131,15 +131,15 @@
 
         <div class="form-group" id="jury-group"
             style="display: {% if project and project.is_contest %}block{% else %}none{% endif %};">
-            <label class="cdx-label">أعضاء لجنة التحكيم (Jurors)</label>
+            <label class="cdx-label">أعضاء لجنة التحكيم</label>
             <div class="cdx-chip-input-container" id="jury_container">
                 <div class="cdx-chips-list" id="jury_chips" style="display: contents;"></div>
-                <input type="text" class="cdx-chip-inline-input" id="jury_input" placeholder="Enter the username of the juror you want to add to this round.">
+                <input type="text" class="cdx-chip-inline-input" id="jury_input" placeholder="اسم المستخدم في ويكيميديا واضغط Enter للإضافة...">
             </div>
             <input type="hidden" id="jury_members" name="jury_members"
                 value="{{ (project.jury_members|join(',')) if project and project.jury_members else '' }}">
             <div style="font-size: 0.8rem; color: #54595d; margin-top: 4px;">
-                Enter the username of the juror you want to add to this round.
+                أدخل اسم مستخدم ويكيميديا واضغط Enter للإضافة (يتم التحقق من الحساب تلقائياً).
             </div>
             <div class="cdx-chip-feedback" id="jury_feedback"></div>
         </div>
