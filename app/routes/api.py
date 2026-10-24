@@ -7,6 +7,7 @@ from app.oauth import member_required, project_editor_required, get_current_user
 from app import db
 from sqlalchemy import func
 import bleach
+from app.wiki_utils import normalize_wiki_target
 
 api_bp = Blueprint("api", __name__)
 
@@ -52,7 +53,17 @@ def list_projects():
     if project_type:
         query = query.filter_by(project_type=project_type)
     if target_wiki:
-        query = query.filter_by(target_wiki=target_wiki)
+        try:
+            norm_code, norm_url = normalize_wiki_target(target_wiki)
+            from urllib.parse import urlparse
+            norm_domain = urlparse(norm_url).netloc
+            query = query.filter(
+                (Project.target_wiki == target_wiki) |
+                (Project.target_wiki == norm_code) |
+                (Project.target_wiki == norm_domain)
+            )
+        except ValueError:
+            query = query.filter_by(target_wiki=target_wiki)
         
     projects = query.order_by(Project.created_at.desc()).all()
     return jsonify([p.to_dict() for p in projects]), 200
@@ -140,16 +151,7 @@ def slug_Stat(slug):
 
     member_ids = [cm.user_id for cm in community_members]
 
-    total_edits_member_comm = 0
-
-    if member_ids:
-        total_edits_member_comm = (
-            db.session.query(
-                func.coalesce(func.sum(StatSnapshot.total_edits), 0)
-            )
-            .filter(StatSnapshot.user_id.in_(member_ids))
-            .scalar()
-        )
+    total_edits_member_comm = total_edits
     return jsonify({
         "community": community.name,
         "slug": community.slug,
@@ -207,7 +209,17 @@ def list_slug_project(slug):
     if project_type:
         query = query.filter_by(project_type=project_type)
     if target_wiki:
-        query = query.filter_by(target_wiki=target_wiki)
+        try:
+            norm_code, norm_url = normalize_wiki_target(target_wiki)
+            from urllib.parse import urlparse
+            norm_domain = urlparse(norm_url).netloc
+            query = query.filter(
+                (Project.target_wiki == target_wiki) |
+                (Project.target_wiki == norm_code) |
+                (Project.target_wiki == norm_domain)
+            )
+        except ValueError:
+            query = query.filter_by(target_wiki=target_wiki)
 
     projects = query.order_by(Project.created_at.desc()).all()
     return jsonify([p.to_dict() for p in projects]), 200
@@ -226,8 +238,21 @@ def create_projetct(slug):
         return jsonify({"error": "Project title is required."}), 400
 
     raw_description = (data.get("description") or "").strip()
-    project_type = data.get("project_type", "Workshop")
-    target_wiki = data.get("target_wiki", community.default_wiki or "ar.wikipedia.org")
+    raw_type = (data.get("project_type") or "Workshop").strip()
+    custom_type = (data.get("custom_project_type") or "").strip()
+    if raw_type == "Other" and custom_type:
+        project_type = custom_type
+    elif raw_type == "Other":
+        project_type = "Other"
+    else:
+        project_type = raw_type or "Workshop"
+
+    raw_target_wiki = data.get("target_wiki", community.default_wiki or "arwiki")
+    try:
+        target_wiki, _ = normalize_wiki_target(raw_target_wiki)
+    except ValueError as err:
+        return jsonify({"error": str(err)}), 400
+
     status = data.get("status", "In Progress")
 
     safe_description = bleach.clean(
@@ -298,6 +323,18 @@ def create_projetct(slug):
         "project": new_project.to_dict()
     }), 201
 
+@api_bp.route("/<string:slug>/projects/<int:project_id>", methods=["GET"])
+@api_bp.route("/projects/<int:project_id>", methods=["GET"])
+def get_project(project_id, slug=None):
+    if slug:
+        community = Community.query.filter_by(slug=slug).first()
+        if not community:
+            return jsonify({"error": "Community not found"}), 404
+        project = Project.query.filter_by(id=project_id, community_id=community.id).first_or_404()
+    else:
+        project = Project.query.get_or_404(project_id)
+    return jsonify(project.to_dict()), 200
+
 @api_bp.route("/<string:slug>/projects/<int:project_id>", methods=["PUT"])
 @api_bp.route("/projects/<int:project_id>", methods=["PUT"])
 @project_editor_required
@@ -326,10 +363,21 @@ def update_project(project_id, slug=None):
             strip=True
         )
 
-    if "project_type" in data:
-        project.project_type = data["project_type"]
+    if "project_type" in data or "custom_project_type" in data:
+        raw_type = (data.get("project_type") or project.project_type).strip()
+        custom_type = (data.get("custom_project_type") or "").strip()
+        if raw_type == "Other" and custom_type:
+            project.project_type = custom_type
+        else:
+            project.project_type = raw_type or project.project_type
+
     if "target_wiki" in data:
-        project.target_wiki = data["target_wiki"]
+        raw_target_wiki = (data.get("target_wiki") or "").strip()
+        try:
+            target_wiki, _ = normalize_wiki_target(raw_target_wiki)
+            project.target_wiki = target_wiki
+        except ValueError as err:
+            return jsonify({"error": str(err)}), 400
     if "status" in data:
         project.status = data["status"]
 
@@ -421,3 +469,48 @@ def exp_community_projects(slug):
         mimetype="text/csv",
         headers={"Content-Disposition": f"attachment;filename=athar_{community.slug}_projects.csv"}
     )
+
+
+@api_bp.route("/check-user", methods=["GET"])
+def check_user():
+    username = (request.args.get("username") or "").strip()
+    if not username:
+        return jsonify({"exists": False, "error": "Username is required."}), 400
+
+    # Check local DB first
+    local_user = User.query.filter(func.lower(User.username) == username.lower()).first()
+    if local_user:
+        return jsonify({
+            "exists": True,
+            "username": local_user.username,
+            "source": "local"
+        }), 200
+
+    # Check Wikimedia CentralAuth
+    import requests
+    url = "https://meta.wikimedia.org/w/api.php"
+    params = {
+        "action": "query",
+        "meta": "globaluserinfo",
+        "guiuser": username,
+        "format": "json"
+    }
+    headers = {"User-Agent": "AtharTool/1.0 (https://toolforge.org/athar; contact@athar)"}
+    try:
+        r = requests.get(url, params=params, headers=headers, timeout=5)
+        if r.status_code == 200:
+            gui = r.json().get("query", {}).get("globaluserinfo", {})
+            if "missing" in gui:
+                return jsonify({"exists": False, "username": username}), 200
+            canonical_name = gui.get("name", username)
+            return jsonify({
+                "exists": True,
+                "username": canonical_name,
+                "id": gui.get("id"),
+                "home": gui.get("home", ""),
+                "source": "wikimedia"
+            }), 200
+    except Exception:
+        pass
+
+    return jsonify({"exists": False, "username": username}), 200

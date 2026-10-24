@@ -202,5 +202,57 @@ class TestApiEndpoints(unittest.TestCase):
         res_bad = self.client.get("/api/wm-ma/export?format=json")
         self.assertEqual(res_bad.status_code, 400)
 
+    def test_create_project_with_custom_activity_type(self):
+        payload = {
+            "title": "Custom Type API Project",
+            "description": "Created with custom activity type",
+            "project_type": "Other",
+            "custom_project_type": "حفل توزيع جوائز الويكي"
+        }
+        res = self.client.post("/api/wm-ma/projects", json=payload)
+        self.assertEqual(res.status_code, 201)
+        data = res.get_json()
+        self.assertEqual(data["project"]["project_type"], "حفل توزيع جوائز الويكي")
+
+    def test_update_project_with_custom_activity_type(self):
+        pid = self.p1_id
+        update_payload = {
+            "project_type": "Other",
+            "custom_project_type": "معرض الصور الفوتوغرافية"
+        }
+        res = self.client.put(f"/api/wm-ma/projects/{pid}", json=update_payload)
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        self.assertEqual(data["project"]["project_type"], "معرض الصور الفوتوغرافية")
+
+    def test_get_single_project_api(self):
+        pid = self.p1_id
+        res = self.client.get(f"/api/wm-ma/projects/{pid}")
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        self.assertEqual(data["id"], pid)
+        self.assertEqual(data["title"], "Wikipedia Workshop")
+
+    def test_api_target_wiki_validation_and_security(self):
+        # Valid code 'wikidata'
+        res_ok = self.client.post("/api/wm-ma/projects", json={
+            "title": "Wikidata Sprint",
+            "target_wiki": "wikidata"
+        })
+        self.assertEqual(res_ok.status_code, 201)
+        data = res_ok.get_json()
+        self.assertEqual(data["project"]["target_wiki"], "wikidatawiki")
+        self.assertEqual(data["project"]["target_wiki_url"], "https://www.wikidata.org")
+
+        # Invalid / untrusted target_wiki should fail with 400
+        res_bad = self.client.post("/api/wm-ma/projects", json={
+            "title": "Untrusted Wiki",
+            "target_wiki": "https://attacker.org"
+        })
+        self.assertEqual(res_bad.status_code, 400)
+
 if __name__ == "__main__":
     unittest.main()
+
+
+

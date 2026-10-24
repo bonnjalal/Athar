@@ -12,13 +12,17 @@ document.addEventListener("DOMContentLoaded", () => {
     let overviewChart = null;
 
     function getCommunitySlug() {
+        const dashboardEl = document.querySelector("[data-community-slug]");
+        if (dashboardEl && dashboardEl.dataset.communitySlug) {
+            return dashboardEl.dataset.communitySlug;
+        }
+
         const pathParts = window.location.pathname
             .split("/")
             .filter(Boolean);
 
-        return pathParts.length
-            ? pathParts[pathParts.length - 1]
-            : null;
+        if (!pathParts.length) return null;
+        return decodeURIComponent(pathParts[pathParts.length - 1]);
     }
 
     function showError(message) {
@@ -75,18 +79,18 @@ document.addEventListener("DOMContentLoaded", () => {
             const stats = await response.json();
 
             if (membersElement) {
-                membersElement.textContent =
-                    stats.total_community_member ?? 0;
+                const members = stats.total_members ?? stats.total_community_member ?? 0;
+                membersElement.textContent = Number(members).toLocaleString();
             }
 
             if (projectsElement) {
-                projectsElement.textContent =
-                    stats.total_project_member ?? 0;
+                const projects = stats.total_projects ?? stats.total_project_member ?? 0;
+                projectsElement.textContent = Number(projects).toLocaleString();
             }
 
             if (editsElement) {
-                editsElement.textContent =
-                    stats.total_edits_member_comm ?? 0;
+                const edits = stats.total_edits ?? stats.total_edits_member_comm ?? 0;
+                editsElement.textContent = Number(edits).toLocaleString();
             }
 
             // Bar chart: projects by type
@@ -95,10 +99,20 @@ document.addEventListener("DOMContentLoaded", () => {
             const activityValues = Object.values(activities);
 
             const activityColors = {
-                "Contest / Competition": "#8b5cf6",
+                "Workshop": "#10b981",
                 "Edit-a-thon": "#06b6d4",
                 "Photo Walk": "#f59e0b",
-                "Workshop": "#10b981"
+                "Contest": "#8b5cf6",
+                "Contest / Competition": "#8b5cf6",
+                "GLAM": "#ec4899",
+                "Education Program": "#3b82f6",
+                "Outreach": "#3b82f6",
+                "Campaign": "#f97316",
+                "Conference / Meetup": "#6366f1",
+                "Hackathon": "#14b8a6",
+                "Translation": "#eab308",
+                "Exhibition": "#a855f7",
+                "Other": "#64748b"
             };
 
             if (activityCanvas) {

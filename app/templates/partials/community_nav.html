@@ -1,0 +1,55 @@
+<!-- Community Header Bar -->
+<div class="community-header-bar" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 1rem; background: #ffffff; padding: 1.25rem 1.5rem; border-radius: 8px; border: 1px solid #c8ccd1;">
+    <div>
+        <h2 style="margin: 0 0 0.4rem 0; font-size: 1.5rem; color: #202122;">{{ community.name }}</h2>
+        <div style="display: flex; gap: 0.75rem; align-items: center; font-size: 0.85rem; color: #54595d; flex-wrap: wrap;">
+            <span class="community-item-slug">{{ community.slug }}</span>
+            {% if community.meta_roster_page %}
+                <span>صفحة الأعضاء: <a href="{{ community.meta_roster_page if community.meta_roster_page.startswith('http') else 'https://meta.wikimedia.org/wiki/' + community.meta_roster_page }}" target="_blank" rel="noopener" style="color: #36c;">Meta-Wiki</a></span>
+            {% endif %}
+            <span>المشروع الافتراضي: <strong>{{ community.default_wiki }}</strong></span>
+        </div>
+    </div>
+
+    <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+        <a href="{{ url_for('web.create_project') }}" class="cdx-button cdx-button--action cdx-button--weight-primary">
+            + إضافة نشاط جديد
+        </a>
+        <form action="{{ url_for('web.manual_sync', slug=community.slug) }}" method="POST" style="margin: 0;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <button type="submit" class="cdx-button cdx-button--quiet" title="استيراد وتحديث قائمة الأعضاء والتعديلات من Meta-Wiki">
+                تحديث بيانات الأعضاء
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- Codex Tab Navigation Menu -->
+<div class="cdx-tabs-container">
+    <nav class="cdx-tabs" role="tablist" aria-label="أقسام المجتمع">
+        <a href="{{ url_for('web.dashboard', slug=community.slug) }}"
+           class="cdx-tab-item {% if active_tab == 'overview' %}cdx-tab-item--active{% endif %}"
+           role="tab"
+           aria-selected="{% if active_tab == 'overview' %}true{% else %}false{% endif %}">
+            نظرة عامة
+        </a>
+        <a href="{{ url_for('web.community_activities', slug=community.slug) }}"
+           class="cdx-tab-item {% if active_tab == 'activities' %}cdx-tab-item--active{% endif %}"
+           role="tab"
+           aria-selected="{% if active_tab == 'activities' %}true{% else %}false{% endif %}">
+            الأنشطة
+            {% if total_projects is defined and total_projects is not none %}
+                <span class="cdx-tab-badge" style="margin-right: 6px; font-size: 0.8rem; background: rgba(51, 102, 204, 0.1); color: #36c; padding: 2px 7px; border-radius: 10px;">{{ total_projects }}</span>
+            {% endif %}
+        </a>
+        <a href="{{ url_for('web.community_users', slug=community.slug) }}"
+           class="cdx-tab-item {% if active_tab == 'users' %}cdx-tab-item--active{% endif %}"
+           role="tab"
+           aria-selected="{% if active_tab == 'users' %}true{% else %}false{% endif %}">
+            الأعضاء
+            {% if total_members is defined and total_members is not none %}
+                <span class="cdx-tab-badge" style="margin-right: 6px; font-size: 0.8rem; background: rgba(51, 102, 204, 0.1); color: #36c; padding: 2px 7px; border-radius: 10px;">{{ total_members }}</span>
+            {% endif %}
+        </a>
+    </nav>
+</div>

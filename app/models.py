@@ -119,6 +119,11 @@ class Project(db.Model):
     
     community = db.relationship("Community",back_populates="projects")
 
+    @property
+    def target_wiki_url(self):
+        from app.wiki_utils import resolve_wiki_url
+        return resolve_wiki_url(self.target_wiki)
+
     def to_dict(self):
         return {
             "id": self.id,
@@ -127,6 +132,7 @@ class Project(db.Model):
             "description": self.description,
             "project_type": self.project_type,
             "target_wiki": self.target_wiki,
+            "target_wiki_url": self.target_wiki_url,
             "start_date": self.start_date.isoformat() if self.start_date else None,
             "end_date": self.end_date.isoformat() if self.end_date else None,
             "status": self.status,

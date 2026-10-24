@@ -3,83 +3,107 @@
 {% block title %}{{ community.name if community else 'Wikimedia' }} — Athar{% endblock %}
 
 {% block content %}
+<div class="dashboard-charts" data-community-slug="{{ community.slug }}" data-community-name="{{ community.name }}">
 
-<div class="dashboard-charts">
+    <!-- Community Header & Tab Navigation -->
+    {% include "partials/community_nav.html" %}
 
+    <div id="statsError" class="cdx-message cdx-message--error" style="display: none; margin-bottom: 1rem;" hidden></div>
+
+    <!-- KPI Summary Cards -->
     <div class="stats-summary">
         <div class="kpi-card">
             <span class="kpi-title">أعضاء المجتمع</span>
-            <span class="kpi-value" id="totalMembers">—</span>
+            <span class="kpi-value" id="totalMembers">{{ total_members }}</span>
         </div>
 
         <div class="kpi-card">
-            <span class="kpi-title">عدد المشاريع</span>
-            <span class="kpi-value" id="totalProjects">—</span>
+            <span class="kpi-title">إجمالي الأنشطة</span>
+            <span class="kpi-value" id="totalProjects">{{ total_projects }}</span>
+        </div>
+
+        <div class="kpi-card">
+            <span class="kpi-title">أنشطة جارية حالياً</span>
+            <span class="kpi-value" style="color: #15803d;">{{ in_progress_projects|length }}</span>
         </div>
 
         <div class="kpi-card">
             <span class="kpi-title">مجموع التعديلات</span>
-            <span class="kpi-value" id="totalEdits">—</span>
+            <span class="kpi-value" id="totalEdits">{{ total_edits }}</span>
         </div>
     </div>
 
-    <div class="chart-card">
-        <h3>المشاريع حسب نوع النشاط</h3>
-        <div class="chart-container">
-            <canvas id="activityChart"></canvas>
+    <!-- Charts Section -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
+        <div class="chart-card" style="margin: 0;">
+            <h3>الأنشطة حسب النوع</h3>
+            <div class="chart-container">
+                <canvas id="activityChart"></canvas>
+            </div>
+        </div>
+
+        <div class="chart-card" style="margin: 0;">
+            <h3>مقارنة الأعضاء والمشاريع</h3>
+            <div class="chart-container">
+                <canvas id="overviewChart"></canvas>
+            </div>
         </div>
     </div>
 
-    <div class="chart-card">
-        <h3>مقارنة الأعضاء والمشاريع</h3>
-        <div class="chart-container">
-            <canvas id="overviewChart"></canvas>
+    <!-- In Progress Activities Section -->
+    <div class="in-progress-section" style="background: #ffffff; border: 1px solid #c8ccd1; border-radius: 8px; padding: 1.5rem; margin-bottom: 2rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 0.75rem;">
+            <div>
+                <h3 style="margin: 0 0 0.25rem 0; font-size: 1.25rem; color: #202122;">أنشطة جارية حالياً (In Progress)</h3>
+                <p style="margin: 0; font-size: 0.85rem; color: #54595d;">الأنشطة والورشات والمنافسات النشطة حالياً في المجتمع.</p>
+            </div>
+            <a href="{{ url_for('web.community_activities', slug=community.slug) }}" class="cdx-button cdx-button--action">
+                عرض جميع الأنشطة ({{ total_projects }}) &larr;
+            </a>
         </div>
+
+        {% if in_progress_projects %}
+            <div class="projects-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1rem;">
+                {% for proj in in_progress_projects %}
+                    <div class="project-card" style="border: 1px solid #a2a9b1; border-radius: 8px; padding: 1.25rem; background: #fafafa; display: flex; flex-direction: column; justify-content: space-between;">
+                        <div>
+                            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.75rem; gap: 0.5rem; flex-wrap: wrap;">
+                                <span class="project-type-badge" style="background: #eaf3ff; color: #36c; font-size: 0.78rem; font-weight: 600; padding: 3px 8px; border-radius: 4px;">{{ proj.project_type }}</span>
+                                <span class="project-status project-status--in-progress" style="background: #dcfce7; color: #15803d; font-size: 0.78rem; font-weight: 600; padding: 3px 8px; border-radius: 4px;">جارية (In Progress)</span>
+                            </div>
+                            <h4 style="margin: 0 0 0.5rem 0; font-size: 1.1rem; color: #202122;">
+                                <a href="{{ url_for('web.view_project', project_id=proj.id) }}" style="color: inherit; text-decoration: none;">{{ proj.title }}</a>
+                            </h4>
+                            <div style="font-size: 0.85rem; color: #54595d; margin-bottom: 0.75rem;">
+                                <div>المشروع: <strong>{{ proj.target_wiki }}</strong></div>
+                                <div>المنظم: <strong>{{ proj.lead_organizer }}</strong></div>
+                                {% if proj.co_organizers %}
+                                    <div>منظمون مشاركون: <span style="color: #202122;">{{ proj.co_organizers|join(', ') }}</span></div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #eaecf0; padding-top: 0.75rem; margin-top: 0.5rem;">
+                            <span style="font-size: 0.78rem; color: #72777d;">{{ proj.created_at.strftime('%Y-%m-%d') if proj.created_at else '' }}</span>
+                            <a href="{{ url_for('web.view_project', project_id=proj.id) }}" class="cdx-button cdx-button--quiet" style="font-size: 0.85rem;">تفاصيل النشاط</a>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div style="text-align: center; padding: 2.5rem 1rem; color: #54595d;">
+                <p style="font-size: 1rem; margin-bottom: 1rem;">لا توجد أنشطة قيد التنفيذ حالياً في هذا المجتمع.</p>
+                <div style="display: flex; justify-content: center; gap: 0.75rem;">
+                    <a href="{{ url_for('web.create_project') }}" class="cdx-button cdx-button--action cdx-button--weight-primary">+ إضافة نشاط جديد</a>
+                    <a href="{{ url_for('web.community_activities', slug=community.slug) }}" class="cdx-button">عرض سجل الأنشطة السابقة</a>
+                </div>
+            </div>
+        {% endif %}
     </div>
-    <div class="filter-project-box">
-        <label for="list-comm">اختر المجتمع:</label>
-        <select id="list-comm"></select>
-        
 
-<form id="dashboard-filters">
-    <input type="date" id="start-date">
-    <input type="date" id="end-date">
-
-    <select id="activity-type">
-        <option value="">All types</option>
-        <option value="Workshop">Workshops</option>
-        <option value="Edit-a-thon">Edit-a-thons</option>
-        <option value="Photo Walk">Photo Walks</option>
-    </select>
-
-    <select id="project-status">
-        <option value="">All statuses</option>
-        <option value="active">Active</option>
-        <option value="completed">Completed</option>
-        <option value="In progress">In progress</option>
-        <option value="Planned">
-            Planned
-        </option>
-    </select>
-
-    <button type="submit" id="apply-filters">
-        Filter
-    </button>
-
-    <button type="reset" id="reset-filters">
-        Reset
-    </button>
-</form>
-    <div id="filter-results">
-    Choisis les filtres puis clique sur Filter.
 </div>
-    </div>
-</div>
-
 {% endblock %}
 
 {% block scripts %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script src="{{ url_for('static', filename='js/filters.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/charts.js') }}" defer></script>
 {% endblock %}

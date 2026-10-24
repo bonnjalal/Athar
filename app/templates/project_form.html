@@ -30,24 +30,77 @@
 
         <div class="form-row">
             <div class="form-group flex-1">
-                <label for="project_type" class="cdx-label">نوع النشاط</label>
-                <select id="project_type" name="project_type" class="cdx-select">
-                    <option value="Workshop" {% if project and project.project_type=='Workshop' %}selected{% endif %}>
-                        ورشة تدريبية (Workshop)</option>
-                    <option value="Edit-a-thon" {% if project and project.project_type=='Edit-a-thon' %}selected{% endif
-                        %}>ماراثون تحرير (Edit-a-thon)</option>
-                    <option value="Photo Walk" {% if project and project.project_type=='Photo Walk' %}selected{% endif
-                        %}>جولة تصوير (Photo Walk)</option>
-                    <option value="Outreach" {% if project and project.project_type=='Outreach' %}selected{% endif %}>
-                        شراكة تعليمية (Outreach)</option>
+                <label for="project_type" class="cdx-label">نوع النشاط (Activity Type)</label>
+                <select id="project_type" name="project_type" class="cdx-select" onchange="handleProjectTypeChange(this.value)">
+                    <option value="Workshop" {% if not project or project.project_type == 'Workshop' %}selected{% endif %}>
+                        ورشة تدريبية (Workshop)
+                    </option>
+                    <option value="Edit-a-thon" {% if project and project.project_type == 'Edit-a-thon' %}selected{% endif %}>
+                        ماراثون تحرير (Edit-a-thon)
+                    </option>
+                    <option value="Photo Walk" {% if project and project.project_type == 'Photo Walk' %}selected{% endif %}>
+                        جولة تصوير (Photo Walk)
+                    </option>
+                    <option value="Contest" {% if project and (project.project_type == 'Contest' or 'Contest' in project.project_type or 'مسابقة' in project.project_type) %}selected{% endif %}>
+                        مسابقة / منافسة (Contest / Competition)
+                    </option>
+                    <option value="GLAM" {% if project and project.project_type == 'GLAM' %}selected{% endif %}>
+                        شراكة ثقافية (GLAM Partnership)
+                    </option>
+                    <option value="Education Program" {% if project and (project.project_type == 'Education Program' or project.project_type == 'Outreach') %}selected{% endif %}>
+                        برنامج تعليمي / شراكة جامعية (Education / Outreach)
+                    </option>
+                    <option value="Campaign" {% if project and project.project_type == 'Campaign' %}selected{% endif %}>
+                        حملة محتوى (Content Campaign e.g. #1Lib1Ref, WikiGap)
+                    </option>
+                    <option value="Conference / Meetup" {% if project and project.project_type == 'Conference / Meetup' %}selected{% endif %}>
+                        مؤتمر أو لقاء مجتمعي (Conference / Meetup)
+                    </option>
+                    <option value="Hackathon" {% if project and project.project_type == 'Hackathon' %}selected{% endif %}>
+                        فعالية برمجية / هاكاثون (Hackathon / Tech Event)
+                    </option>
+                    <option value="Translation" {% if project and project.project_type == 'Translation' %}selected{% endif %}>
+                        حملة ترجمة (Translation Sprint)
+                    </option>
+                    <option value="Exhibition" {% if project and project.project_type == 'Exhibition' %}selected{% endif %}>
+                        معرض وتوثيق (Exhibition / Showcase)
+                    </option>
+                    <option value="Other" {% if project and project.project_type not in ['Workshop', 'Edit-a-thon', 'Photo Walk', 'Contest', 'GLAM', 'Education Program', 'Outreach', 'Campaign', 'Conference / Meetup', 'Hackathon', 'Translation', 'Exhibition'] %}selected{% endif %}>
+                        أخرى - تحديد يدوي (Other / Custom Activity)...
+                    </option>
                 </select>
             </div>
 
             <div class="form-group flex-1">
-                <label for="target_wiki" class="cdx-label">المشروع المستهدف</label>
-                <input type="text" id="target_wiki" name="target_wiki" class="cdx-text-input"
-                    value="{{ project.target_wiki if project else config.DEFAULT_TARGET_WIKI }}">
+                <label for="target_wiki" class="cdx-label">رمز مشروع ويكيميديا (Target Wiki Code)</label>
+                <input type="text" id="target_wiki" name="target_wiki" class="cdx-text-input" list="wikis-list"
+                    value="{{ project.target_wiki if project else 'arwiki' }}"
+                    placeholder="مثال: arwiki, commons, wikidata, arywiki"
+                    autocomplete="off" required oninput="previewWikiLink(this.value)">
+                <datalist id="wikis-list">
+                    <option value="arwiki">ويكيبيديا العربية (ar.wikipedia.org)</option>
+                    <option value="arywiki">ويكيبيديا المغربية - الدارجة (ary.wikipedia.org)</option>
+                    <option value="commons">ويكيميديا كومنز (commons.wikimedia.org)</option>
+                    <option value="wikidata">ويكي بيانات (wikidata.org)</option>
+                    <option value="metawiki">ميتا-ويكي (meta.wikimedia.org)</option>
+                    <option value="enwiki">Wikipedia English (en.wikipedia.org)</option>
+                    <option value="frwiki">Wikipédia Français (fr.wikipedia.org)</option>
+                    <option value="zghwiki">ويكيبيديا الأمازيغية (zgh.wikipedia.org)</option>
+                    <option value="shiwiki">ويكيبيديا الشلحية (shi.wikipedia.org)</option>
+                    <option value="arwikisource">ويكي مصدر العربي (ar.wikisource.org)</option>
+                    <option value="arwiktionary">ويكاموس العربي (ar.wiktionary.org)</option>
+                    <option value="wikifunctions">ويكي الدوال (wikifunctions.org)</option>
+                </datalist>
+                <div id="target_wiki_preview" style="margin-top: 6px; font-size: 0.85rem;"></div>
             </div>
+        </div>
+
+        <!-- Custom Activity Type Field (revealed when 'Other' is chosen or for custom types) -->
+        <div class="form-group" id="custom-activity-group" style="display: {% if project and project.project_type not in ['Workshop', 'Edit-a-thon', 'Photo Walk', 'Contest', 'GLAM', 'Education Program', 'Outreach', 'Campaign', 'Conference / Meetup', 'Hackathon', 'Translation', 'Exhibition'] %}block{% else %}none{% endif %}; margin-bottom: 1rem;">
+            <label for="custom_project_type" class="cdx-label">اكتب نوع النشاط المخصص (Custom Activity Name)</label>
+            <input type="text" id="custom_project_type" name="custom_project_type" class="cdx-text-input"
+                   value="{% if project and project.project_type not in ['Workshop', 'Edit-a-thon', 'Photo Walk', 'Contest', 'GLAM', 'Education Program', 'Outreach', 'Campaign', 'Conference / Meetup', 'Hackathon', 'Translation', 'Exhibition'] %}{{ project.project_type }}{% endif %}"
+                   placeholder="مثال: ندوة فكرية، حفل جوائز، بودكاست ويكي، لقاء استراتيجي...">
         </div>
 
         <div class="form-group">
@@ -57,10 +110,17 @@
         </div>
 
         <div class="form-group">
-            <label for="co_organizers" class="cdx-label">منظمون مشاركون (أسماء المستخدمين مفصولة بفاصلة)</label>
-            <input type="text" id="co_organizers" name="co_organizers" class="cdx-text-input"
-                value="{{ (project.co_organizers|join(', ')) if project and project.co_organizers else '' }}"
-                placeholder="UserA, UserB">
+            <label class="cdx-label">منظمون مشاركون (Co-organizers)</label>
+            <div class="cdx-chip-input-container" id="co_orgs_container">
+                <div class="cdx-chips-list" id="co_orgs_chips" style="display: contents;"></div>
+                <input type="text" class="cdx-chip-inline-input" id="co_orgs_input" placeholder="اسم المستخدم في ويكيميديا واضغط Enter للإضافة...">
+            </div>
+            <input type="hidden" id="co_organizers" name="co_organizers"
+                value="{{ (project.co_organizers|join(',')) if project and project.co_organizers else '' }}">
+            <div style="font-size: 0.8rem; color: #54595d; margin-top: 4px;">
+                أدخل اسم مستخدم ويكيميديا واضغط Enter للإضافة (يتم التحقق من الحساب تلقائياً).
+            </div>
+            <div class="cdx-chip-feedback" id="co_orgs_feedback"></div>
         </div>
 
         <div class="form-checkbox-group">
@@ -71,10 +131,17 @@
 
         <div class="form-group" id="jury-group"
             style="display: {% if project and project.is_contest %}block{% else %}none{% endif %};">
-            <label for="jury_members" class="cdx-label">أعضاء لجنة التحكيم (أسماء مفصولة بفاصلة)</label>
-            <input type="text" id="jury_members" name="jury_members" class="cdx-text-input"
-                value="{{ (project.jury_members|join(', ')) if project and project.jury_members else '' }}"
-                placeholder="JuryUser1, JuryUser2">
+            <label class="cdx-label">أعضاء لجنة التحكيم (Jurors)</label>
+            <div class="cdx-chip-input-container" id="jury_container">
+                <div class="cdx-chips-list" id="jury_chips" style="display: contents;"></div>
+                <input type="text" class="cdx-chip-inline-input" id="jury_input" placeholder="Enter the username of the juror you want to add to this round.">
+            </div>
+            <input type="hidden" id="jury_members" name="jury_members"
+                value="{{ (project.jury_members|join(',')) if project and project.jury_members else '' }}">
+            <div style="font-size: 0.8rem; color: #54595d; margin-top: 4px;">
+                Enter the username of the juror you want to add to this round.
+            </div>
+            <div class="cdx-chip-feedback" id="jury_feedback"></div>
         </div>
 
         <button type="submit" class="cdx-button cdx-button--action cdx-button--weight-primary">
@@ -90,5 +157,234 @@
         const isChecked = document.getElementById('is_contest').checked;
         document.getElementById('jury-group').style.display = isChecked ? 'block' : 'none';
     }
+
+    function handleProjectTypeChange(val) {
+        const customGroup = document.getElementById('custom-activity-group');
+        const customInput = document.getElementById('custom_project_type');
+        if (val === 'Other') {
+            customGroup.style.display = 'block';
+            if (customInput) customInput.focus();
+        } else {
+            customGroup.style.display = 'none';
+        }
+        if (val === 'Contest') {
+            const contestCb = document.getElementById('is_contest');
+            if (contestCb && !contestCb.checked) {
+                contestCb.checked = true;
+                toggleJuryField();
+            }
+        }
+    }
+
+    const WIKI_MAP = {
+        'commons': 'https://commons.wikimedia.org',
+        'commonswiki': 'https://commons.wikimedia.org',
+        'wikidata': 'https://www.wikidata.org',
+        'wikidatawiki': 'https://www.wikidata.org',
+        'meta': 'https://meta.wikimedia.org',
+        'metawiki': 'https://meta.wikimedia.org',
+        'species': 'https://species.wikimedia.org',
+        'specieswiki': 'https://species.wikimedia.org',
+        'incubator': 'https://incubator.wikimedia.org',
+        'incubatorwiki': 'https://incubator.wikimedia.org',
+        'mediawiki': 'https://www.mediawiki.org',
+        'mediawikiwiki': 'https://www.mediawiki.org',
+        'wikifunctions': 'https://www.wikifunctions.org',
+        'wikifunctionswiki': 'https://www.wikifunctions.org',
+        'sourceswiki': 'https://wikisource.org',
+        'ويكيبيديا': 'https://ar.wikipedia.org',
+        'كومنز': 'https://commons.wikimedia.org',
+        'ويكي بيانات': 'https://www.wikidata.org'
+    };
+
+    function resolveWikiPreview(input) {
+        if (!input) return '';
+        const clean = input.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/$/, '');
+        if (WIKI_MAP[clean]) return WIKI_MAP[clean];
+        if (clean.endsWith('.wikipedia.org') || clean.endsWith('.wikimedia.org') || clean.endsWith('.wikidata.org') || clean.endsWith('.wikisource.org')) {
+            return 'https://' + clean;
+        }
+        const m = clean.match(/^([a-z]{2,12}(?:-[a-z0-9]{2,12})*)(wiki|wikisource|wiktionary|wikibooks|wikiquote|wikivoyage|wikinews|wikiversity)$/);
+        if (m) {
+            const lang = m[1];
+            const fam = m[2];
+            return fam === 'wiki' ? `https://${lang}.wikipedia.org` : `https://${lang}.${fam}.org`;
+        }
+        return '';
+    }
+
+    function previewWikiLink(val) {
+        const preview = document.getElementById('target_wiki_preview');
+        if (!preview) return;
+        const url = resolveWikiPreview(val);
+        if (url) {
+            preview.style.color = '#15803d';
+            preview.innerHTML = `الرابط المعتمد: <a href="${url}" target="_blank" rel="noopener" style="color: #36c; text-decoration: underline;">${url}</a>`;
+        } else if (val && val.trim()) {
+            preview.style.color = '#b91c1c';
+            preview.textContent = 'تنبيه: أدخل رمز مشروع ويكيميديا صالح مثل arwiki أو commons أو wikidata.';
+        } else {
+            preview.textContent = '';
+        }
+    }
+
+    function setupChipInput(config) {
+        const container = document.getElementById(config.containerId);
+        const chipsList = document.getElementById(config.chipsId);
+        const input = document.getElementById(config.inputId);
+        const hidden = document.getElementById(config.hiddenId);
+        const feedback = document.getElementById(config.feedbackId);
+
+        if (!container || !chipsList || !input || !hidden) return;
+
+        let items = [];
+
+        if (hidden.value && hidden.value.trim()) {
+            items = hidden.value.split(',')
+                .map(s => s.trim())
+                .filter(Boolean);
+            render();
+        }
+
+        function sync() {
+            hidden.value = items.join(',');
+        }
+
+        function render() {
+            chipsList.innerHTML = '';
+            items.forEach((name, index) => {
+                const chip = document.createElement('span');
+                chip.className = 'cdx-chip';
+                chip.textContent = name;
+
+                const removeBtn = document.createElement('button');
+                removeBtn.type = 'button';
+                removeBtn.className = 'cdx-chip-remove';
+                removeBtn.innerHTML = '&times;';
+                removeBtn.setAttribute('aria-label', 'حذف ' + name);
+                removeBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    items.splice(index, 1);
+                    render();
+                    setFeedback('', '');
+                    input.focus();
+                });
+
+                chip.appendChild(removeBtn);
+                chipsList.appendChild(chip);
+            });
+            sync();
+        }
+
+        function setFeedback(msg, type) {
+            if (!feedback) return;
+            feedback.textContent = msg;
+            feedback.className = 'cdx-chip-feedback ' + (type ? 'is-' + type : '');
+            if (type === 'error') {
+                container.classList.add('is-error');
+            } else {
+                container.classList.remove('is-error');
+            }
+        }
+
+        container.addEventListener('click', (e) => {
+            if (e.target !== input && !e.target.classList.contains('cdx-chip-remove')) {
+                input.focus();
+            }
+        });
+
+        input.addEventListener('focus', () => container.classList.add('is-focused'));
+        input.addEventListener('blur', () => container.classList.remove('is-focused'));
+        input.addEventListener('input', () => {
+            if (container.classList.contains('is-error')) {
+                container.classList.remove('is-error');
+                if (feedback && feedback.classList.contains('is-error')) {
+                    feedback.textContent = '';
+                }
+            }
+        });
+
+        let isChecking = false;
+
+        async function verifyAndAdd(rawName) {
+            const username = rawName.trim().replace(/^,+|,+$/g, '');
+            if (!username) return;
+
+            const alreadyExists = items.some(x => x.toLowerCase() === username.toLowerCase());
+            if (alreadyExists) {
+                setFeedback(`المستخدم "${username}" مضاف مسبقاً في القائمة.`, 'error');
+                return;
+            }
+
+            isChecking = true;
+            setFeedback(`جاري التحقق من حساب "${username}" في ويكيميديا...`, 'loading');
+
+            try {
+                const resp = await fetch(`/api/check-user?username=${encodeURIComponent(username)}`);
+                const data = await resp.json();
+                if (data.exists) {
+                    const canonicalName = data.username || username;
+                    items.push(canonicalName);
+                    render();
+                    input.value = '';
+                    setFeedback(`تم التحقق من الحساب "${canonicalName}" وإضافته بنجاح.`, 'success');
+                    setTimeout(() => {
+                        if (feedback && feedback.classList.contains('is-success')) {
+                            setFeedback('', '');
+                        }
+                    }, 2500);
+                } else {
+                    setFeedback(`المستخدم "${username}" غير مسجل في ويكيميديا. يرجى التأكد من كتابة الاسم بدقة.`, 'error');
+                }
+            } catch (e) {
+                setFeedback('تعذر التحقق من الحساب حالياً، يرجى المحاولة لاحقاً.', 'error');
+            } finally {
+                isChecking = false;
+            }
+        }
+
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ',') {
+                e.preventDefault();
+                if (!isChecking) {
+                    verifyAndAdd(input.value);
+                }
+            } else if (e.key === 'Backspace' && input.value === '' && items.length > 0) {
+                items.pop();
+                render();
+                setFeedback('', '');
+            }
+        });
+
+        input.addEventListener('paste', (e) => {
+            const pasteData = (e.clipboardData || window.clipboardData).getData('text');
+            if (pasteData && pasteData.includes(',')) {
+                e.preventDefault();
+                const parts = pasteData.split(',').map(s => s.trim()).filter(Boolean);
+                parts.forEach(part => verifyAndAdd(part));
+            }
+        });
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        const input = document.getElementById('target_wiki');
+        if (input && input.value) previewWikiLink(input.value);
+
+        setupChipInput({
+            containerId: 'co_orgs_container',
+            chipsId: 'co_orgs_chips',
+            inputId: 'co_orgs_input',
+            hiddenId: 'co_organizers',
+            feedbackId: 'co_orgs_feedback'
+        });
+
+        setupChipInput({
+            containerId: 'jury_container',
+            chipsId: 'jury_chips',
+            inputId: 'jury_input',
+            hiddenId: 'jury_members',
+            feedbackId: 'jury_feedback'
+        });
+    });
 </script>
 {% endblock %}

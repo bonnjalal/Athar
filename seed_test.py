@@ -161,4 +161,4 @@ with app.app_context():
 
     db.session.add_all(projects_sample)
     db.session.commit()
-    print("✅ Done! Test data inserted successfully into dev.db.")
+    print(" Done! Test data inserted successfully into dev.db.")
