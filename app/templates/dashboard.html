@@ -51,11 +51,11 @@
     </div>
 
     <!-- In Progress Activities Section -->
-    <div class="in-progress-section" style="background: #ffffff; border: 1px solid #c8ccd1; border-radius: 8px; padding: 1.5rem; margin-bottom: 2rem;">
+    <div class="in-progress-section">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 0.75rem;">
             <div>
-                <h3 style="margin: 0 0 0.25rem 0; font-size: 1.25rem; color: #202122;">أنشطة جارية حالياً</h3>
-                <p style="margin: 0; font-size: 0.85rem; color: #54595d;">الأنشطة والورشات والمنافسات النشطة حالياً في المجتمع.</p>
+                <h3 class="in-progress-title">أنشطة جارية حالياً</h3>
+                <p class="in-progress-subtitle">الأنشطة والورشات والمنافسات النشطة حالياً في المجتمع.</p>
             </div>
             <a href="{{ url_for('web.community_activities', slug=community.slug) }}" class="cdx-button cdx-button--action">
                 عرض جميع الأنشطة ({{ total_projects }}) &larr;
@@ -63,28 +63,37 @@
         </div>
 
         {% if in_progress_projects %}
-            <div class="projects-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1rem;">
+            <div class="projects-grid">
                 {% for proj in in_progress_projects %}
-                    <div class="project-card" style="border: 1px solid #a2a9b1; border-radius: 8px; padding: 1.25rem; background: #fafafa; display: flex; flex-direction: column; justify-content: space-between;">
-                        <div>
-                            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.75rem; gap: 0.5rem; flex-wrap: wrap;">
-                                <span class="project-type-badge" style="background: #eaf3ff; color: #36c; font-size: 0.78rem; font-weight: 600; padding: 3px 8px; border-radius: 4px;">{{ proj.project_type }}</span>
-                                <span class="project-status project-status--in-progress" style="background: #dcfce7; color: #15803d; font-size: 0.78rem; font-weight: 600; padding: 3px 8px; border-radius: 4px;">جارية</span>
+                    <div class="project-card">
+                        <div class="project-card-top">
+                            <div class="project-card-badges">
+                                <span class="project-type-badge">{{ proj.project_type|ar_type }}</span>
+                                <span class="project-status project-status--in-progress">{{ proj.status|ar_status }}</span>
                             </div>
-                            <h4 style="margin: 0 0 0.5rem 0; font-size: 1.1rem; color: #202122;">
-                                <a href="{{ url_for('web.view_project', project_id=proj.id) }}" style="color: inherit; text-decoration: none;">{{ proj.title }}</a>
+                            <h4 class="project-card-title">
+                                <a href="{{ url_for('web.view_project', project_id=proj.id) }}">{{ proj.title }}</a>
                             </h4>
-                            <div style="font-size: 0.85rem; color: #54595d; margin-bottom: 0.75rem;">
-                                <div>المشروع: <strong>{{ proj.target_wiki }}</strong></div>
-                                <div>المنظم: <strong>{{ proj.lead_organizer }}</strong></div>
+                            <div class="project-card-meta">
+                                <div class="project-meta-row">
+                                    <span class="project-meta-label">المشروع:</span>
+                                    <bdi class="project-meta-val">{{ proj.target_wiki }}</bdi>
+                                </div>
+                                <div class="project-meta-row">
+                                    <span class="project-meta-label">المنظم:</span>
+                                    <bdi class="project-meta-val">{{ proj.lead_organizer }}</bdi>
+                                </div>
                                 {% if proj.co_organizers %}
-                                    <div>منظمون مشاركون: <span style="color: #202122;">{{ proj.co_organizers|join(', ') }}</span></div>
+                                    <div class="project-meta-row">
+                                        <span class="project-meta-label">منظمون مشاركون:</span>
+                                        <bdi class="project-meta-val">{{ proj.co_organizers|join('، ') }}</bdi>
+                                    </div>
                                 {% endif %}
                             </div>
                         </div>
-                        <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #eaecf0; padding-top: 0.75rem; margin-top: 0.5rem;">
-                            <span style="font-size: 0.78rem; color: #72777d;">{{ proj.created_at.strftime('%Y-%m-%d') if proj.created_at else '' }}</span>
-                            <a href="{{ url_for('web.view_project', project_id=proj.id) }}" class="cdx-button cdx-button--quiet" style="font-size: 0.85rem;">تفاصيل النشاط</a>
+                        <div class="project-card-footer-bar">
+                            <span class="project-card-date">{{ proj.created_at.strftime('%Y-%m-%d') if proj.created_at else '' }}</span>
+                            <a href="{{ url_for('web.view_project', project_id=proj.id) }}" class="project-card-details-btn">تفاصيل النشاط</a>
                         </div>
                     </div>
                 {% endfor %}

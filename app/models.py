@@ -122,6 +122,16 @@ class Project(db.Model):
         from app.wiki_utils import resolve_wiki_url
         return resolve_wiki_url(self.target_wiki)
 
+    @property
+    def project_type_ar(self):
+        from app.wiki_utils import translate_activity_type
+        return translate_activity_type(self.project_type)
+
+    @property
+    def status_ar(self):
+        from app.wiki_utils import translate_status
+        return translate_status(self.status)
+
     def to_dict(self):
         return {
             "id": self.id,

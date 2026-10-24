@@ -126,3 +126,43 @@ def resolve_wiki_url(raw_input: str, default: str = "arwiki") -> str:
         return url
     except ValueError:
         return "https://ar.wikipedia.org"
+
+
+ACTIVITY_TYPE_ARABIC = {
+    "Workshop": "ورشة تدريبية",
+    "Edit-a-thon": "ماراثون تحرير",
+    "Photo Walk": "جولة تصوير",
+    "Contest": "مسابقة ومنافسة",
+    "Contest / Competition": "مسابقة ومنافسة",
+    "GLAM": "شراكة ثقافية",
+    "Education Program": "برنامج تعليمي",
+    "Outreach": "برنامج توعوي",
+    "Campaign": "حملة محتوى",
+    "Conference / Meetup": "مؤتمر أو لقاء",
+    "Hackathon": "فعالية برمجية",
+    "Translation": "حملة ترجمة",
+    "Exhibition": "معرض وتوثيق",
+    "Other": "نشاط مخصص"
+}
+
+STATUS_ARABIC = {
+    "In Progress": "جارية",
+    "in progress": "جارية",
+    "Planned": "مخططة",
+    "planned": "مخططة",
+    "Completed": "مكتملة",
+    "completed": "مكتملة"
+}
+
+
+def translate_activity_type(val: str) -> str:
+    if not val:
+        return "نشاط مجتمعي"
+    return ACTIVITY_TYPE_ARABIC.get(val, val)
+
+
+def translate_status(val: str) -> str:
+    if not val:
+        return "جارية"
+    return STATUS_ARABIC.get(val, val)
+

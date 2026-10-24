@@ -240,20 +240,11 @@ function displayProjects(projects) {
         title.textContent =
             project.title || project.name || project.project || "نشاط بدون عنوان";
 
-        const badges = document.createElement("div");
-        badges.className = "project-badges-wrap";
+        const topWrap = document.createElement("div");
+        topWrap.className = "project-card-top";
 
-        const status = document.createElement("span");
-        const statusMap = {
-            "in progress": "جارية",
-            "planned": "مخططة",
-            "completed": "مكتملة"
-        };
-        const rawStatus = project.status || "In Progress";
-        const statusDisplay = statusMap[rawStatus.toLowerCase()] || rawStatus;
-        status.className = `project-status project-status--${rawStatus.toLowerCase().replace(/\s+/g, "-")}`;
-        status.textContent = statusDisplay;
-        badges.appendChild(status);
+        const badges = document.createElement("div");
+        badges.className = "project-card-badges";
 
         const project_type = document.createElement("span");
         project_type.className = "project-type-badge";
@@ -276,6 +267,18 @@ function displayProjects(projects) {
         project_type.textContent = typeMap[rawType.toLowerCase()] || rawType;
         badges.appendChild(project_type);
 
+        const status = document.createElement("span");
+        const statusMap = {
+            "in progress": "جارية",
+            "planned": "مخططة",
+            "completed": "مكتملة"
+        };
+        const rawStatus = project.status || "In Progress";
+        const statusDisplay = statusMap[rawStatus.toLowerCase()] || rawStatus;
+        status.className = `project-status project-status--${rawStatus.toLowerCase().replace(/\s+/g, "-")}`;
+        status.textContent = statusDisplay;
+        badges.appendChild(status);
+
         if (project.is_contest) {
             const contestBadge = document.createElement("span");
             contestBadge.className = "project-contest-badge";
@@ -283,34 +286,67 @@ function displayProjects(projects) {
             badges.appendChild(contestBadge);
         }
 
+        topWrap.appendChild(badges);
+        topWrap.appendChild(title);
+
         const meta = document.createElement("div");
         meta.className = "project-card-meta";
 
-        const community = document.createElement("p");
-        community.className = "project-community";
-        const commName =
-            project.community_name ||
-            project.community ||
-            communitySelect.selectedOptions[0]?.textContent ||
-            "غير محدد";
-        community.textContent = `المجتمع: ${commName}`;
-        meta.appendChild(community);
-
-        if (project.target_wiki) {
-            const wiki = document.createElement("p");
-            wiki.className = "project-wiki";
-            wiki.textContent = `المشروع: ${project.target_wiki}`;
-            meta.appendChild(wiki);
+        if (project.community_name || project.community || communitySelect.selectedOptions[0]?.textContent) {
+            const commRow = document.createElement("div");
+            commRow.className = "project-meta-row";
+            const commLabel = document.createElement("span");
+            commLabel.className = "project-meta-label";
+            commLabel.textContent = "المجتمع:";
+            const commVal = document.createElement("bdi");
+            commVal.className = "project-meta-val";
+            commVal.textContent = project.community_name || project.community || communitySelect.selectedOptions[0]?.textContent || "غير محدد";
+            commRow.append(commLabel, commVal);
+            meta.appendChild(commRow);
         }
 
-        const footer = document.createElement("div");
-        footer.className = "project-card-footer";
-        const cta = document.createElement("span");
-        cta.className = "project-card-cta";
-        cta.textContent = "عرض التفاصيل";
-        footer.appendChild(cta);
+        if (project.target_wiki) {
+            const wikiRow = document.createElement("div");
+            wikiRow.className = "project-meta-row";
+            const wikiLabel = document.createElement("span");
+            wikiLabel.className = "project-meta-label";
+            wikiLabel.textContent = "المشروع:";
+            const wikiVal = document.createElement("bdi");
+            wikiVal.className = "project-meta-val";
+            wikiVal.textContent = project.target_wiki;
+            wikiRow.append(wikiLabel, wikiVal);
+            meta.appendChild(wikiRow);
+        }
 
-        card.append(title, badges, meta, footer);
+        if (project.lead_organizer) {
+            const orgRow = document.createElement("div");
+            orgRow.className = "project-meta-row";
+            const orgLabel = document.createElement("span");
+            orgLabel.className = "project-meta-label";
+            orgLabel.textContent = "المنظم:";
+            const orgVal = document.createElement("bdi");
+            orgVal.className = "project-meta-val";
+            orgVal.textContent = project.lead_organizer;
+            orgRow.append(orgLabel, orgVal);
+            meta.appendChild(orgRow);
+        }
+
+        topWrap.appendChild(meta);
+
+        const footer = document.createElement("div");
+        footer.className = "project-card-footer-bar";
+
+        const dateSpan = document.createElement("span");
+        dateSpan.className = "project-card-date";
+        dateSpan.textContent = project.created_at ? String(project.created_at).slice(0, 10) : "";
+
+        const detailsBtn = document.createElement("span");
+        detailsBtn.className = "project-card-details-btn";
+        detailsBtn.textContent = "تفاصيل النشاط";
+
+        footer.append(dateSpan, detailsBtn);
+
+        card.append(topWrap, footer);
 
         card.addEventListener("click", () => openProjectModal(project));
         card.addEventListener("keydown", (e) => {
