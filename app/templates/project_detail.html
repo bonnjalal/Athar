@@ -20,8 +20,8 @@
         <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 1rem; border-bottom: 1px solid #eaecf0; padding-bottom: 1.5rem; margin-bottom: 1.5rem;">
             <div>
                 <div style="display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.75rem; flex-wrap: wrap;">
-                    <span class="project-type-badge">{{ project.project_type }}</span>
-                    <span class="project-status project-status--{{ project.status|lower|replace(' ', '-') }}">{{ project.status }}</span>
+                    <span class="project-type-badge">{{ project.project_type_ar }}</span>
+                    <span class="project-status project-status--{{ project.status|lower|replace(' ', '-') }}">{{ project.status_ar }}</span>
                     {% if project.is_contest %}
                         <span class="project-contest-badge">مسابقة ومنافسة</span>
                     {% endif %}
@@ -78,7 +78,17 @@
             {% endif %}
 
             <div class="modal-meta-item">
-                <span class="meta-label">تاريخ الإنشاء</span>
+                <span class="meta-label">تاريخ البدء</span>
+                <span class="meta-val">{{ project.start_date.strftime('%Y-%m-%d') if project.start_date else 'غير محدد' }}</span>
+            </div>
+
+            <div class="modal-meta-item">
+                <span class="meta-label">تاريخ الانتهاء</span>
+                <span class="meta-val">{{ project.end_date.strftime('%Y-%m-%d') if project.end_date else 'غير محدد' }}</span>
+            </div>
+
+            <div class="modal-meta-item">
+                <span class="meta-label">تاريخ التسجيل</span>
                 <span class="meta-val">{{ project.created_at.strftime('%Y-%m-%d') if project.created_at else '-' }}</span>
             </div>
 

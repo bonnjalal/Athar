@@ -859,6 +859,39 @@ body.modal-open {
         background: #475569;
         border-color: #64748b;
     }
+    .form-container {
+        background: #1e293b;
+        border-color: #334155;
+        color: #f1f5f9;
+    }
+    .form-container h2 {
+        color: #f1f5f9;
+    }
+    .form-subtitle {
+        color: #94a3b8;
+    }
+    .cdx-text-input,
+    .cdx-textarea,
+    .cdx-select {
+        background: #0f172a;
+        border-color: #475569;
+        color: #f1f5f9;
+        color-scheme: dark;
+    }
+    .cdx-text-input:focus,
+    .cdx-textarea:focus,
+    .cdx-select:focus {
+        border-color: #38bdf8;
+        box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.25);
+    }
+    .project-detail-card {
+        background: #1e293b;
+        border-color: #334155;
+        color: #f1f5f9;
+    }
+    .project-detail-card h1 {
+        color: #f1f5f9;
+    }
 }
 
 /* ========================================
@@ -940,6 +973,19 @@ body.modal-open {
 
 .form-group {
     margin-bottom: 16px;
+}
+
+.form-row {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+    align-items: flex-start;
+}
+
+.form-row > .flex-1,
+.form-group.flex-1 {
+    flex: 1;
+    min-width: 180px;
 }
 
 /* ========================================

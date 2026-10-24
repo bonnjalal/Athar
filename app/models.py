@@ -132,6 +132,16 @@ class Project(db.Model):
         from app.wiki_utils import translate_status
         return translate_status(self.status)
 
+    def sync_status_with_dates(self):
+        """Update status if dates indicate a change based on calendar."""
+        if not self.start_date and not self.end_date:
+            return self.status
+        from app.wiki_utils import determine_project_status
+        new_status = determine_project_status(self.start_date, self.end_date, "auto")
+        if new_status != self.status:
+            self.status = new_status
+        return self.status
+
     def to_dict(self):
         return {
             "id": self.id,

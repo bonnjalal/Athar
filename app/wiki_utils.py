@@ -166,3 +166,57 @@ def translate_status(val: str) -> str:
         return "جارية"
     return STATUS_ARABIC.get(val, val)
 
+
+def determine_project_status(start_date=None, end_date=None, requested_status=None) -> str:
+    """
+    Determine the project status based on starting and ending dates:
+    - 'Completed' (finished) if the ending date is in the past (end_date < today)
+    - 'Planned' (in the future) if the starting date is in the future (start_date > today)
+    - 'In Progress' (running) if active: start_date <= today and (not end_date or end_date >= today)
+    If requested_status is explicitly given (not 'auto'), it is honored as a manual override.
+    """
+    from datetime import date, datetime
+    today = date.today()
+
+    # Parse date if string
+    if isinstance(start_date, str) and start_date.strip():
+        try:
+            start_date = datetime.strptime(start_date.strip(), "%Y-%m-%d").date()
+        except ValueError:
+            start_date = None
+    elif isinstance(start_date, datetime):
+        start_date = start_date.date()
+
+    if isinstance(end_date, str) and end_date.strip():
+        try:
+            end_date = datetime.strptime(end_date.strip(), "%Y-%m-%d").date()
+        except ValueError:
+            end_date = None
+    elif isinstance(end_date, datetime):
+        end_date = end_date.date()
+
+    # If explicit manual override is specified (not 'auto' and not empty)
+    if requested_status and requested_status not in ("auto", "Auto", ""):
+        low = str(requested_status).strip().lower()
+        if low in ("completed", "مكتملة", "منتهية", "finished"):
+            return "Completed"
+        if low in ("planned", "مخططة", "قادمة", "in the future"):
+            return "Planned"
+        if low in ("in progress", "جارية", "قيد التنفيذ", "running"):
+            return "In Progress"
+        return requested_status
+
+    # If status is 'auto' (or omitted), determine status dynamically based on dates:
+    if end_date and end_date < today:
+        return "Completed"
+    if start_date and start_date > today:
+        return "Planned"
+    if start_date and start_date <= today:
+        if end_date and end_date < today:
+            return "Completed"
+        return "In Progress"
+    if end_date and end_date >= today:
+        return "In Progress"
+
+    return "In Progress"
+
