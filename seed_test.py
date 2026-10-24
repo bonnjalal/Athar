@@ -22,9 +22,9 @@ with app.app_context():
         meta_roster_page="https://meta.wikimedia.org/wiki/Wikimedia_MA_User_Group/Members",
     )
     wm_tn = Community(
-        name="Wikimedia Tunisia",
+        name="Wikimedia Kuwait",
         slug="wm-tn",
-        meta_roster_page="https://meta.wikimedia.org/wiki/Wikimedia_Tunisie/Membres",
+        meta_roster_page="https://meta.wikimedia.org/wiki/Wikimedians_of_Kuwait_User_Group/Membership",
     )
     db.session.add_all([wm_ma, wm_tn])
     db.session.flush()
@@ -60,7 +60,7 @@ with app.app_context():
             "wiki_breakdown": {"wikidata": 4100, "ar.wikipedia": 1540, "commons": 700},
         },
         {
-            "username": "TunisianEditor",
+            "username": "KuwaitiEditor",
             "community": wm_tn,
             "total_edits": 9800,
             "home_wiki": "ar.wikipedia",
@@ -147,13 +147,13 @@ with app.app_context():
         Project(
             community_id=wm_tn.id,
             title="Carthage Archaeological Sites Edit-a-thon",
-            description="Documenting Tunisian historical landmarks across Arabic Wikipedia.",
+            description="Documenting Kuwaiti historical landmarks across Arabic Wikipedia.",
             project_type="Edit-a-thon",
             target_wiki="ar.wikipedia",
             start_date=date(2026, 10, 5),
             end_date=date(2026, 10, 20),
             status="Completed",
-            lead_organizer="TunisianEditor",
+            lead_organizer="KuwaitiEditor",
             co_organizers=[],
             jury_members=[],
         ),

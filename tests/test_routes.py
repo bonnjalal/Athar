@@ -58,5 +58,26 @@ class TestRoutesAndSecurity(unittest.TestCase):
             self.assertIsNotNone(p)
             self.assertEqual(p.lead_organizer, "TestVolunteer")
 
+    def test_login_mock_auth_redirects_cleanly(self):
+        # Without prior community
+        res = self.client.get("/login")
+        self.assertEqual(res.status_code, 302)
+        self.assertEqual(res.headers.get("Location"), "/")
+
+        # With prior community slug in session
+        with self.client.session_transaction() as sess:
+            sess["community_slug"] = "wm-ma"
+        res = self.client.get("/login")
+        self.assertEqual(res.status_code, 302)
+        self.assertEqual(res.headers.get("Location"), "/wm-ma/")
+
+    def test_logout_redirects_cleanly(self):
+        with self.client.session_transaction() as sess:
+            sess["username"] = "TestVolunteer"
+            sess["is_member"] = True
+        res = self.client.get("/logout")
+        self.assertEqual(res.status_code, 302)
+        self.assertEqual(res.headers.get("Location"), "/")
+
 if __name__ == "__main__":
     unittest.main()

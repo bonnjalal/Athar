@@ -36,13 +36,19 @@ def get_current_user():
 
 # --- OAuth Blueprint Routes ---
 
+def _get_redirect_target():
+    slug = session.get('community_slug')
+    if slug:
+        return url_for('web.dashboard', slug=slug)
+    return url_for('web.index')
+
 @oauth_bp.route('/login')
 def login():
     if current_app.config.get('MOCK_AUTH', False):
         session.pop('logged_out', None)
         session['username'] = 'MoroccoVolunteer'
         session['is_member'] = True
-        return redirect(url_for('web.dashboard'))
+        return redirect(_get_redirect_target())
     
     redirect_uri = url_for('oauth.oauth_callback', _external=True)
     return oauth.wikimedia.authorize_redirect(redirect_uri)
@@ -65,13 +71,13 @@ def oauth_callback():
         current_app.logger.error(f"OAuth callback error: {e}")
         abort(400, description="Authentication failed.")
         
-    return redirect(url_for('web.dashboard'))
+    return redirect(_get_redirect_target())
 
 @oauth_bp.route('/logout')
 def logout():
     session.clear()
     session['logged_out'] = True
-    return redirect(url_for('web.dashboard'))
+    return redirect(url_for('web.index'))
 
 
 # --- Security Decorators ---

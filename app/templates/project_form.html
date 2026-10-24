@@ -7,57 +7,74 @@
 
     <form method="POST" class="cdx-form">
         <!-- Flask-WTF CSRF Token -->
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+
+        {% if communities %}
+        <div class="form-group">
+            <label for="community_id" class="cdx-label">المجتمع التابع له النشاط</label>
+            <select id="community_id" name="community_id" class="cdx-select">
+                {% for comm in communities %}
+                    <option value="{{ comm.id }}" {% if (project and project.community_id == comm.id) or (not project and selected_community_slug == comm.slug) %}selected{% endif %}>
+                        {{ comm.name }}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+        {% endif %}
 
         <div class="form-group">
             <label for="title" class="cdx-label">عنوان النشاط / المشروع</label>
-            <input type="text" id="title" name="title" required class="cdx-text-input" 
-                   value="{{ project.title if project else '' }}" placeholder="مثال: ورشة تحرير ويكيبيديا بجامعة الرباط">
+            <input type="text" id="title" name="title" required class="cdx-text-input"
+                value="{{ project.title if project else '' }}" placeholder="مثال: ورشة تحرير ويكيبيديا بجامعة الرباط">
         </div>
 
         <div class="form-row">
             <div class="form-group flex-1">
                 <label for="project_type" class="cdx-label">نوع النشاط</label>
                 <select id="project_type" name="project_type" class="cdx-select">
-                    <option value="Workshop" {% if project and project.project_type == 'Workshop' %}selected{% endif %}>ورشة تدريبية (Workshop)</option>
-                    <option value="Edit-a-thon" {% if project and project.project_type == 'Edit-a-thon' %}selected{% endif %}>ماراثون تحرير (Edit-a-thon)</option>
-                    <option value="Photo Walk" {% if project and project.project_type == 'Photo Walk' %}selected{% endif %}>جولة تصوير (Photo Walk)</option>
-                    <option value="Outreach" {% if project and project.project_type == 'Outreach' %}selected{% endif %}>شراكة تعليمية (Outreach)</option>
+                    <option value="Workshop" {% if project and project.project_type=='Workshop' %}selected{% endif %}>
+                        ورشة تدريبية (Workshop)</option>
+                    <option value="Edit-a-thon" {% if project and project.project_type=='Edit-a-thon' %}selected{% endif
+                        %}>ماراثون تحرير (Edit-a-thon)</option>
+                    <option value="Photo Walk" {% if project and project.project_type=='Photo Walk' %}selected{% endif
+                        %}>جولة تصوير (Photo Walk)</option>
+                    <option value="Outreach" {% if project and project.project_type=='Outreach' %}selected{% endif %}>
+                        شراكة تعليمية (Outreach)</option>
                 </select>
             </div>
 
             <div class="form-group flex-1">
                 <label for="target_wiki" class="cdx-label">المشروع المستهدف</label>
                 <input type="text" id="target_wiki" name="target_wiki" class="cdx-text-input"
-                       value="{{ project.target_wiki if project else config.DEFAULT_TARGET_WIKI }}">
+                    value="{{ project.target_wiki if project else config.DEFAULT_TARGET_WIKI }}">
             </div>
         </div>
 
         <div class="form-group">
-            <label for="description" class="cdx-label">تفاصيل النشاط (سيتم فحصها أمنياً بـ Bleach)</label>
+            <label for="description" class="cdx-label">تفاصيل النشاط </label>
             <textarea id="description" name="description" rows="5" required class="cdx-textarea"
-                      placeholder="اذكر أهداف الورشة، النتائج المتوقعة، والروابط ذات الصلة...">{{ project.description if project else '' }}</textarea>
+                placeholder="اذكر أهداف الورشة، النتائج المتوقعة، والروابط ذات الصلة...">{{ project.description if project else '' }}</textarea>
         </div>
 
         <div class="form-group">
             <label for="co_organizers" class="cdx-label">منظمون مشاركون (أسماء المستخدمين مفصولة بفاصلة)</label>
             <input type="text" id="co_organizers" name="co_organizers" class="cdx-text-input"
-                   value="{{ (project.co_organizers|join(', ')) if project and project.co_organizers else '' }}"
-                   placeholder="UserA, UserB">
+                value="{{ (project.co_organizers|join(', ')) if project and project.co_organizers else '' }}"
+                placeholder="UserA, UserB">
         </div>
 
         <div class="form-checkbox-group">
-            <input type="checkbox" id="is_contest" name="is_contest" value="1" 
-                   {% if project and project.is_contest %}checked{% endif %}
-                   onchange="toggleJuryField()">
+            <input type="checkbox" id="is_contest" name="is_contest" value="1" {% if project and project.is_contest
+                %}checked{% endif %} onchange="toggleJuryField()">
             <label for="is_contest">هذا النشاط عبارة عن مسابقة أو منافسة (تتطلب لجنة تحكيم)</label>
         </div>
 
-        <div class="form-group" id="jury-group" style="display: {% if project and project.is_contest %}block{% else %}none{% endif %};">
+        <div class="form-group" id="jury-group"
+            style="display: {% if project and project.is_contest %}block{% else %}none{% endif %};">
             <label for="jury_members" class="cdx-label">أعضاء لجنة التحكيم (أسماء مفصولة بفاصلة)</label>
             <input type="text" id="jury_members" name="jury_members" class="cdx-text-input"
-                   value="{{ (project.jury_members|join(', ')) if project and project.jury_members else '' }}"
-                   placeholder="JuryUser1, JuryUser2">
+                value="{{ (project.jury_members|join(', ')) if project and project.jury_members else '' }}"
+                placeholder="JuryUser1, JuryUser2">
         </div>
 
         <button type="submit" class="cdx-button cdx-button--action cdx-button--weight-primary">
@@ -69,9 +86,9 @@
 
 {% block scripts %}
 <script>
-function toggleJuryField() {
-    const isChecked = document.getElementById('is_contest').checked;
-    document.getElementById('jury-group').style.display = isChecked ? 'block' : 'none';
-}
+    function toggleJuryField() {
+        const isChecked = document.getElementById('is_contest').checked;
+        document.getElementById('jury-group').style.display = isChecked ? 'block' : 'none';
+    }
 </script>
 {% endblock %}

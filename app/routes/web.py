@@ -1,8 +1,8 @@
 import re
 import bleach
-from flask import Blueprint, render_template, request, redirect, url_for, flash, session
+from flask import Blueprint, render_template, request, redirect, url_for, flash, session, current_app
 from app import db
-from app.models import Project, User, StatSnapshot
+from app.models import Project, User, StatSnapshot, Community
 from app.oauth import member_required, project_editor_required, get_current_user
 
 web_bp = Blueprint("web", __name__)
@@ -83,6 +83,7 @@ def dashboard(slug):
 @web_bp.route("/project/new", methods=["GET", "POST"])
 @member_required
 def create_project():
+    communities = Community.query.all()
     if request.method == "POST":
         title = request.form.get("title", "").strip()
         raw_description = request.form.get("description", "").strip()
@@ -92,6 +93,22 @@ def create_project():
         co_orgs_raw = request.form.get("co_organizers", "")
         is_contest = bool(request.form.get("is_contest"))
         jury_raw = request.form.get("jury_members", "")
+
+        # Community association
+        community_id = request.form.get("community_id")
+        if community_id:
+            try:
+                community_id = int(community_id)
+            except ValueError:
+                community_id = None
+        if not community_id:
+            active_slug = session.get("community_slug")
+            if active_slug:
+                active_comm = Community.query.filter_by(slug=active_slug).first()
+                if active_comm:
+                    community_id = active_comm.id
+            if not community_id and communities:
+                community_id = communities[0].id
 
         # Sanitize HTML description against stored XSS
         safe_description = bleach.clean(
@@ -104,13 +121,18 @@ def create_project():
         co_organizers = [u.strip() for u in co_orgs_raw.split(",") if u.strip()]
         jury_members = [j.strip() for j in jury_raw.split(",") if j.strip()] if is_contest else []
 
+        username = session.get("username")
+        if not username and current_app.config.get("MOCK_AUTH", False):
+            username = "MoroccoVolunteer"
+
         new_project = Project(
+            community_id=community_id,
             title=title,
             description=safe_description,
             project_type=project_type,
             target_wiki=target_wiki,
             status=status,
-            lead_organizer=session.get("username"),
+            lead_organizer=username or "MoroccoVolunteer",
             co_organizers=co_organizers,
             is_contest=is_contest,
             jury_members=jury_members
@@ -118,15 +140,20 @@ def create_project():
         db.session.add(new_project)
         db.session.commit()
         flash("Project activity created successfully!", "success")
+
+        target_comm = db.session.get(Community, community_id) if community_id else None
+        if target_comm:
+            return redirect(url_for("web.dashboard", slug=target_comm.slug))
         return redirect(url_for("web.index"))
 
-    return render_template("project_form.html", project=None)
+    return render_template("project_form.html", project=None, communities=communities, selected_community_slug=session.get("community_slug"))
 
 
 @web_bp.route("/project/<int:project_id>/edit", methods=["GET", "POST"])
 @project_editor_required
 def edit_project(project_id):
     project = Project.query.get_or_404(project_id)
+    communities = Community.query.all()
     if request.method == "POST":
         project.title = request.form.get("title", "").strip()
         raw_description = request.form.get("description", "").strip()
@@ -140,18 +167,28 @@ def edit_project(project_id):
         project.target_wiki = request.form.get("target_wiki", project.target_wiki)
         project.status = request.form.get("status", project.status)
         project.is_contest = bool(request.form.get("is_contest"))
-        
+
+        community_id = request.form.get("community_id")
+        if community_id:
+            try:
+                project.community_id = int(community_id)
+            except ValueError:
+                pass
+
         co_orgs_raw = request.form.get("co_organizers", "")
         project.co_organizers = [u.strip() for u in co_orgs_raw.split(",") if u.strip()]
-        
+
         jury_raw = request.form.get("jury_members", "")
         project.jury_members = [j.strip() for j in jury_raw.split(",") if j.strip()] if project.is_contest else []
 
         db.session.commit()
         flash("Project updated successfully!", "success")
+
+        if project.community:
+            return redirect(url_for("web.dashboard", slug=project.community.slug))
         return redirect(url_for("web.index"))
 
-    return render_template("project_form.html", project=project)
+    return render_template("project_form.html", project=project, communities=communities, selected_community_slug=project.community.slug if project.community else session.get("community_slug"))
 
 
 @web_bp.route("/export")
