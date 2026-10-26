@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+
+{% block title %}{{ project.title }} — أثر{% endblock %}
+
+{% block content %}
+<div class="project-detail-container" style="max-width: 900px; margin: 2rem auto; padding: 0 1rem;">
+    <!-- Breadcrumb -->
+    <nav class="project-breadcrumbs" style="margin-bottom: 1.5rem; font-size: 0.9rem; color: #54595d;">
+        <a href="{{ url_for('web.index') }}" style="color: #36c; text-decoration: none;">الرئيسية</a>
+        <span style="margin: 0 0.5rem;">/</span>
+        {% if community %}
+            <a href="{{ url_for('web.dashboard', slug=community.slug) }}" style="color: #36c; text-decoration: none;">{{ community.name }}</a>
+            <span style="margin: 0 0.5rem;">/</span>
+        {% endif %}
+        <span style="color: #202122; font-weight: 600;">{{ project.title }}</span>
+    </nav>
+
+    <div class="project-detail-card" style="background: #ffffff; border: 1px solid #c8ccd1; border-radius: 14px; padding: 2rem; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05);">
+        <!-- Header -->
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 1rem; border-bottom: 1px solid #eaecf0; padding-bottom: 1.5rem; margin-bottom: 1.5rem;">
+            <div>
+                <div style="display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.75rem; flex-wrap: wrap;">
+                    <span class="project-type-badge">{{ project.project_type_ar }}</span>
+                    <span class="project-status project-status--{{ project.status|lower|replace(' ', '-') }}">{{ project.status_ar }}</span>
+                    {% if project.is_contest %}
+                        <span class="project-contest-badge">مسابقة ومنافسة</span>
+                    {% endif %}
+                </div>
+                <h1 style="margin: 0; font-size: 1.75rem; color: #202122; line-height: 1.3;">{{ project.title }}</h1>
+            </div>
+
+            <div style="display: flex; gap: 0.75rem; align-items: center;">
+                {% if can_edit %}
+                    <a href="{{ url_for('web.edit_project', project_id=project.id) }}" class="cdx-button cdx-button--action cdx-button--weight-primary">
+                        تعديل النشاط
+                    </a>
+                {% endif %}
+                {% if community %}
+                    <a href="{{ url_for('web.dashboard', slug=community.slug) }}" class="cdx-button cdx-button--quiet">
+                        العودة للوحة التحكم
+                    </a>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Meta Grid -->
+        <div class="modal-meta-grid" style="margin-bottom: 2rem;">
+            <div class="modal-meta-item">
+                <span class="meta-label">المجتمع التابع له</span>
+                <span class="meta-val">
+                    {% if community %}
+                        <a href="{{ url_for('web.dashboard', slug=community.slug) }}" style="color: #36c; text-decoration: none; font-weight: 600;">{{ community.name }}</a>
+                    {% else %}
+                        عام
+                    {% endif %}
+                </span>
+            </div>
+
+            <div class="modal-meta-item">
+                <span class="meta-label">المشروع المستهدف</span>
+                <span class="meta-val">
+                    <a href="{{ project.target_wiki_url }}" target="_blank" rel="noopener" style="color: #36c; text-decoration: underline;">
+                        {{ project.target_wiki }} ({{ project.target_wiki_url }})
+                    </a>
+                </span>
+            </div>
+
+            <div class="modal-meta-item">
+                <span class="meta-label">المنظم الرئيسي</span>
+                <span class="meta-val" style="font-weight: 600;">{{ project.lead_organizer }}</span>
+            </div>
+
+            {% if project.co_organizers %}
+            <div class="modal-meta-item">
+                <span class="meta-label">المنظمون المشاركون</span>
+                <span class="meta-val">{{ project.co_organizers|join('، ') }}</span>
+            </div>
+            {% endif %}
+
+            <div class="modal-meta-item">
+                <span class="meta-label">تاريخ البدء</span>
+                <span class="meta-val">{{ project.start_date.strftime('%Y-%m-%d') if project.start_date else 'غير محدد' }}</span>
+            </div>
+
+            <div class="modal-meta-item">
+                <span class="meta-label">تاريخ الانتهاء</span>
+                <span class="meta-val">{{ project.end_date.strftime('%Y-%m-%d') if project.end_date else 'غير محدد' }}</span>
+            </div>
+
+            <div class="modal-meta-item">
+                <span class="meta-label">تاريخ التسجيل</span>
+                <span class="meta-val">{{ project.created_at.strftime('%Y-%m-%d') if project.created_at else '-' }}</span>
+            </div>
+
+            {% if project.is_contest and project.jury_members %}
+            <div class="modal-meta-item">
+                <span class="meta-label">لجنة التحكيم</span>
+                <span class="meta-val">{{ project.jury_members|join('، ') }}</span>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Description -->
+        <div class="modal-description-section" style="border-top: 1px solid #eaecf0; padding-top: 1.5rem;">
+            <h3 style="margin-top: 0; color: #202122; font-size: 1.2rem;">تفاصيل ووصف النشاط</h3>
+            <div class="modal-description-content" style="line-height: 1.8; color: #333; font-size: 1rem;">
+                {{ project.description|safe if project.description else '<em>لا توجد تفاصيل إضافية لهذا النشاط.</em>'|safe }}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

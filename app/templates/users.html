@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+
+{% block title %}الأعضاء — {{ community.name if community else 'ويكيميديا' }} — أثر{% endblock %}
+
+{% block content %}
+<div class="community-users-view" data-community-slug="{{ community.slug }}" data-community-name="{{ community.name }}">
+
+    <!-- Community Header & Tab Navigation -->
+    {% include "partials/community_nav.html" %}
+
+    <!-- KPI Summary Cards -->
+    <div class="stats-summary" style="margin-bottom: 1.5rem;">
+        <div class="kpi-card">
+            <span class="kpi-title">إجمالي الأعضاء</span>
+            <span class="kpi-value">{{ total_members }}</span>
+        </div>
+
+        <div class="kpi-card">
+            <span class="kpi-title">مجموع مساهمات المجتمع</span>
+            <span class="kpi-value">{{ total_edits }}</span>
+        </div>
+
+        <div class="kpi-card">
+            <span class="kpi-title">إجمالي الأنشطة</span>
+            <span class="kpi-value">{{ total_projects }}</span>
+        </div>
+    </div>
+
+    <!-- Search & Filter Controls -->
+    <div style="background: #ffffff; border: 1px solid #c8ccd1; border-radius: 8px; padding: 1.25rem 1.5rem; margin-bottom: 1.5rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+        <div style="flex: 1; min-width: 260px; max-width: 480px;">
+            <label for="user-search-input" style="display: block; font-size: 0.85rem; font-weight: 600; color: #54595d; margin-bottom: 6px;">البحث في قائمة الأعضاء:</label>
+            <input type="text" id="user-search-input" class="cdx-text-input" placeholder="اكتب اسم المستخدم للتصفية الفورية..." style="width: 100%;">
+        </div>
+
+        <div style="display: flex; gap: 0.75rem; align-items: center;">
+            <span id="users-count-badge" style="font-size: 0.9rem; color: #54595d; font-weight: 500;">
+                عرض <strong id="visible-users-count">{{ members|length }}</strong> من أصل {{ total_members }} عضواً
+            </span>
+            <form action="{{ url_for('web.manual_sync', slug=community.slug) }}" method="POST" style="margin: 0;">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <button type="submit" class="cdx-button cdx-button--action" title="تحديث بيانات الأعضاء والتعديلات من Meta-Wiki">
+                    تحديث القائمة من ويكيميديا
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Members Table -->
+    <div class="users-table-container">
+        <table class="users-table" id="community-users-table">
+            <thead>
+                <tr>
+                    <th style="width: 50px; text-align: center;">#</th>
+                    <th>اسم المستخدم</th>
+                    <th>الدور في المجتمع</th>
+                    <th>إجمالي التعديلات</th>
+                    <th>المشروع الرئيسي</th>
+                    <th>تاريخ الانضمام</th>
+                    <th style="text-align: center;">الملف في ويكيميديا</th>
+                </tr>
+            </thead>
+            <tbody id="users-table-body">
+                {% if members %}
+                    {% for m in members %}
+                        <tr class="user-row" data-username="{{ m.username|lower }}">
+                            <td style="text-align: center; color: #72777d; font-size: 0.85rem;">{{ loop.index }}</td>
+                            <td>
+                                <div style="display: flex; align-items: center;">
+                                    <span class="user-avatar-badge">{{ m.username[0]|upper }}</span>
+                                    <div>
+                                        <a href="https://meta.wikimedia.org/wiki/User:{{ m.username }}" target="_blank" rel="noopener" style="color: #36c; font-weight: 600; text-decoration: none;">
+                                            {{ m.username }}
+                                        </a>
+                                    </div>
+                                </div>
+                            </td>
+                            <td>
+                                <span class="cdx-tab-badge" style="background: #f0f3f6; color: #202122; padding: 3px 8px; border-radius: 4px; font-size: 0.82rem; font-weight: 500;">
+                                    {{ m.role }}
+                                </span>
+                            </td>
+                            <td>
+                                <strong style="color: #202122; font-size: 1rem;">{{ "{:,}".format(m.total_edits) }}</strong>
+                            </td>
+                            <td style="color: #54595d; font-size: 0.88rem;">
+                                {{ m.home_wiki }}
+                            </td>
+                            <td style="color: #72777d; font-size: 0.85rem;">
+                                {{ m.added_at.strftime('%Y-%m-%d') if m.added_at else '—' }}
+                            </td>
+                            <td style="text-align: center;">
+                                <a href="https://meta.wikimedia.org/wiki/User:{{ m.username }}" target="_blank" rel="noopener" class="cdx-button cdx-button--quiet" style="font-size: 0.82rem; padding: 4px 10px;">
+                                    صفحة المستخدم
+                                </a>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                {% else %}
+                    <tr id="empty-users-row">
+                        <td colspan="7" style="text-align: center; padding: 2.5rem 1rem; color: #54595d;">
+                            لا يوجد أعضاء مسجلون حالياً في هذا المجتمع. اضغط على "تحديث القائمة من ويكيميديا" لمزامنة الأعضاء من صفحة Meta-Wiki.
+                        </td>
+                    </tr>
+                {% endif %}
+            </tbody>
+        </table>
+        
+        <div id="no-search-results" style="display: none; text-align: center; padding: 2rem 1rem; color: #54595d;">
+            لم يتم العثور على أي مستخدم يطابق كلمة البحث.
+        </div>
+    </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const searchInput = document.getElementById('user-search-input');
+    const tableBody = document.getElementById('users-table-body');
+    const rows = tableBody ? tableBody.querySelectorAll('.user-row') : [];
+    const visibleCountEl = document.getElementById('visible-users-count');
+    const noResultsEl = document.getElementById('no-search-results');
+
+    if (!searchInput) return;
+
+    searchInput.addEventListener('input', () => {
+        const query = searchInput.value.trim().toLowerCase();
+        let visibleCount = 0;
+
+        rows.forEach(row => {
+            const username = row.getAttribute('data-username') || '';
+            if (!query || username.includes(query)) {
+                row.style.display = '';
+                visibleCount++;
+            } else {
+                row.style.display = 'none';
+            }
+        });
+
+        if (visibleCountEl) {
+            visibleCountEl.textContent = visibleCount;
+        }
+
+        if (noResultsEl) {
+            noResultsEl.style.display = (visibleCount === 0 && rows.length > 0) ? 'block' : 'none';
+        }
+    });
+});
+</script>
+{% endblock %}

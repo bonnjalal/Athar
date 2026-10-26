@@ -1053,20 +1053,20 @@ if __name__ == "__main__":
     unittest.main()
 """
 
-FILES[".github/PULL_REQUEST_TEMPLATE.md"] = """## 📌 Task Reference
+FILES[".github/PULL_REQUEST_TEMPLATE.md"] = """##  Task Reference
 Closes Phabricator Ticket: `T...` (or Task #)
 
-## 🛠️ Summary of Changes
+##  Summary of Changes
 - Briefly describe what code was added or modified.
 
-## 🧪 How to Test Locally
+##  How to Test Locally
 1. Ensure your local environment is synced with `upstream/dev`.
 2. Run the application with `MOCK_AUTH=True`.
 3. Provide test steps:
    - Step 1:
    - Step 2:
 
-## ✅ Checklist
+##  Checklist
 - [ ] My code targets the `dev` branch (NOT `main`).
 - [ ] I tested my feature locally without breaking existing routes.
 - [ ] No hardcoded secrets were committed.
@@ -1078,7 +1078,7 @@ A lightweight, high-performance community analytics and activity dashboard hoste
 
 ---
 
-## 🚀 Quickstart for Students (Day 1)
+##  Quickstart for Students (Day 1)
 
 ### 1. Clone your Fork
 ```bash
@@ -1109,7 +1109,7 @@ Open [http://127.0.0.1:5000](http://127.0.0.1:5000) in your browser.
 
 ---
 
-## 🌿 Contribution Workflow
+##  Contribution Workflow
 Always create feature branches off `dev`:
 ```bash
 git checkout dev
@@ -1124,19 +1124,19 @@ Submit your Pull Request targeting `base: dev`.
 # ==============================================================================
 
 def build_repository():
-    print("🚀 Initializing Athar repository scaffold...")
+    print(" Initializing Athar repository scaffold...")
     for filepath, content in FILES.items():
         dirname = os.path.dirname(filepath)
         if dirname and not os.path.exists(dirname):
             os.makedirs(dirname, exist_ok=True)
-            print(f"  📁 Created directory: {dirname}/")
+            print(f"   Created directory: {dirname}/")
         
         with open(filepath, "w", encoding="utf-8") as f:
             f.write(content)
-        print(f"  📄 Written file: {filepath}")
+        print(f"   Written file: {filepath}")
 
-    print("\n✅ All 25 repository files generated successfully!")
-    print("👉 Run 'python3 run.py' to launch the local application.")
+    print("\n All 25 repository files generated successfully!")
+    print(" Run 'python3 run.py' to launch the local application.")
 
 if __name__ == "__main__":
     build_repository()

@@ -10,7 +10,6 @@ class Community(db.Model):
   name = db.Column(db.String(120), unique=True, nullable=False)
   slug = db.Column(db.String(64), unique=True, nullable=False, index=True)
   meta_roster_page = db.Column(db.String(255), nullable=False)
-  default_wiki = db.Column(db.String(64), default="ar.wikipedia.org")
   contact_email = db.Column(db.String(128), nullable=True)
   created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
@@ -26,7 +25,6 @@ class Community(db.Model):
       "name": self.name,
       "slug": self.slug,
       "meta_roster_page": self.meta_roster_page,
-      "default_wiki": self.default_wiki,
       "contact_email": self.contact_email,
       "created_at": self.created_at.isoformat() if self.created_at else None
     }
@@ -119,6 +117,31 @@ class Project(db.Model):
     
     community = db.relationship("Community",back_populates="projects")
 
+    @property
+    def target_wiki_url(self):
+        from app.wiki_utils import resolve_wiki_url
+        return resolve_wiki_url(self.target_wiki)
+
+    @property
+    def project_type_ar(self):
+        from app.wiki_utils import translate_activity_type
+        return translate_activity_type(self.project_type)
+
+    @property
+    def status_ar(self):
+        from app.wiki_utils import translate_status
+        return translate_status(self.status)
+
+    def sync_status_with_dates(self):
+        """Update status if dates indicate a change based on calendar."""
+        if not self.start_date and not self.end_date:
+            return self.status
+        from app.wiki_utils import determine_project_status
+        new_status = determine_project_status(self.start_date, self.end_date, "auto")
+        if new_status != self.status:
+            self.status = new_status
+        return self.status
+
     def to_dict(self):
         return {
             "id": self.id,
@@ -127,6 +150,7 @@ class Project(db.Model):
             "description": self.description,
             "project_type": self.project_type,
             "target_wiki": self.target_wiki,
+            "target_wiki_url": self.target_wiki_url,
             "start_date": self.start_date.isoformat() if self.start_date else None,
             "end_date": self.end_date.isoformat() if self.end_date else None,
             "status": self.status,

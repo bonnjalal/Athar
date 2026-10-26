@@ -23,6 +23,17 @@ def create_app(config_class=Config):
     with app.app_context():
         db.create_all()
 
+    # Register Jinja template filters for Arabic localization
+    from app.wiki_utils import translate_activity_type, translate_status
+
+    @app.template_filter('ar_type')
+    def arabic_type_filter(val):
+        return translate_activity_type(val)
+
+    @app.template_filter('ar_status')
+    def arabic_status_filter(val):
+        return translate_status(val)
+
     # Register Blueprints
     from app.routes.web import web_bp
     from app.routes.api import api_bp
