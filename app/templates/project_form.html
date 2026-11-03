@@ -95,6 +95,33 @@
             </div>
         </div>
 
+        <div class="form-row">
+            <div class="form-group flex-1">
+                <label for="start_date" class="cdx-label">تاريخ بدء النشاط *</label>
+                <input type="date" id="start_date" name="start_date" class="cdx-text-input" required
+                    value="{{ project.start_date.strftime('%Y-%m-%d') if project and project.start_date else '' }}"
+                    onchange="syncStatusFromDates()">
+            </div>
+            <div class="form-group flex-1">
+                <label for="end_date" class="cdx-label">تاريخ انتهاء النشاط *</label>
+                <input type="date" id="end_date" name="end_date" class="cdx-text-input" required
+                    value="{{ project.end_date.strftime('%Y-%m-%d') if project and project.end_date else '' }}"
+                    onchange="syncStatusFromDates()">
+            </div>
+            <div class="form-group flex-1">
+                <label for="status" class="cdx-label">حالة النشاط</label>
+                <select id="status" name="status" class="cdx-select" onchange="handleStatusManualChange(this.value)">
+                    <option value="Planned" {% if project and project.status == 'Planned' %}selected{% endif %}>مخطط له (Planned)</option>
+                    <option value="In Progress" {% if not project or project.status == 'In Progress' %}selected{% endif %}>قيد التنفيذ (In Progress)</option>
+                    <option value="Completed" {% if project and project.status == 'Completed' %}selected{% endif %}>مكتمل (Completed)</option>
+                    <option value="Canceled" {% if project and (project.status == 'Canceled' or project.status == 'Cancelled') %}selected{% endif %}>ملغي (Canceled)</option>
+                </select>
+                <div style="font-size: 0.78rem; color: #54595d; margin-top: 4px;">
+                    تحدد الحالة آلياً وفقاً للتواريخ (ويمكن تحديد ملغي يدوياً).
+                </div>
+            </div>
+        </div>
+
         <!-- Custom Activity Type Field (revealed when 'Other' is chosen or for custom types) -->
         <div class="form-group" id="custom-activity-group" style="display: {% if project and project.project_type not in ['Workshop', 'Edit-a-thon', 'Photo Walk', 'Contest', 'GLAM', 'Education Program', 'Outreach', 'Campaign', 'Conference / Meetup', 'Hackathon', 'Translation', 'Exhibition'] %}block{% else %}none{% endif %}; margin-bottom: 1rem;">
             <label for="custom_project_type" class="cdx-label">اكتب نوع النشاط المخصص</label>
@@ -181,6 +208,66 @@
             <div class="cdx-chip-feedback" id="jury_feedback"></div>
         </div>
 
+        <!-- Participants List -->
+        <div class="form-group" style="margin-top: 1rem;">
+            <label for="participants" class="cdx-label">قائمة المشاركين في النشاط (اختياري)</label>
+            <textarea id="participants" name="participants" rows="4" class="cdx-textarea"
+                placeholder="أدخل أسماء المشاركين (اسم مستخدم في كل سطر أو مفصولة بفواصل)...">{{ (project.participants|join('\n')) if project and project.participants else '' }}</textarea>
+            <div style="font-size: 0.8rem; color: #54595d; margin-top: 4px;">
+                أدخل أسماء المشاركين (اسم مستخدم في كل سطر أو مفصولة بفواصل).
+            </div>
+        </div>
+
+        <!-- Competition Results & Outcomes -->
+        <div class="form-checkbox-group" style="margin-top: 1rem;">
+            <input type="checkbox" id="toggle_results" name="toggle_results" value="1"
+                {% if project and project.results %}checked{% endif %} onchange="toggleResultsSection()">
+            <label for="toggle_results">تسجيل نتائج ومخرجات النشاط / الفائزين (اختياري)</label>
+        </div>
+
+        <div id="results-group" style="display: {% if project and project.results %}block{% else %}none{% endif %}; background: #f8f9fa; border: 1px solid #c8ccd1; border-radius: 8px; padding: 1.25rem; margin-bottom: 1.5rem;">
+            <h4 style="margin-top: 0; margin-bottom: 1rem; color: #202122; font-size: 1rem;">🏆 مخرجات ونتائج النشاط</h4>
+            
+            <div class="form-group">
+                <label for="results_summary" class="cdx-label">ملخص النتائج</label>
+                <textarea id="results_summary" name="results_summary" rows="2" class="cdx-textarea"
+                    placeholder="ملخص عام لأبرز مخرجات ونتائج المسابقة أو الورشة...">{{ (project.results.summary if project and project.results and project.results.summary else '') }}</textarea>
+            </div>
+
+            <div class="form-group">
+                <label for="results_winners" class="cdx-label">الفائزون في المسابقة</label>
+                <textarea id="results_winners" name="results_winners" rows="3" class="cdx-textarea"
+                    placeholder="أسماء الفائزين مرتبين حسب المراتب (اسم مستخدم في كل سطر أو مفصول بفواصل)...">{{ (project.results.winners|join('\n')) if project and project.results and project.results.winners else '' }}</textarea>
+                <div style="font-size: 0.8rem; color: #54595d; margin-top: 4px;">
+                    أدخل أسماء حسابات الفائزين بالترتيب (سطر لكل فائز).
+                </div>
+            </div>
+
+            <div class="form-row" style="display: flex; gap: 1rem; flex-wrap: wrap;">
+                <div class="form-group flex-1" style="min-width: 140px;">
+                    <label for="results_articles_created" class="cdx-label">مقالات أُنشئت</label>
+                    <input type="number" id="results_articles_created" name="results_articles_created" min="0" class="cdx-text-input"
+                        value="{{ (project.results.metrics.articles_created if project and project.results and project.results.metrics else '') }}">
+                </div>
+                <div class="form-group flex-1" style="min-width: 140px;">
+                    <label for="results_articles_improved" class="cdx-label">مقالات طُوّرت</label>
+                    <input type="number" id="results_articles_improved" name="results_articles_improved" min="0" class="cdx-text-input"
+                        value="{{ (project.results.metrics.articles_improved if project and project.results and project.results.metrics else '') }}">
+                </div>
+                <div class="form-group flex-1" style="min-width: 140px;">
+                    <label for="results_files_uploaded" class="cdx-label">ملفات رُفعت (كومنز)</label>
+                    <input type="number" id="results_files_uploaded" name="results_files_uploaded" min="0" class="cdx-text-input"
+                        value="{{ (project.results.metrics.files_uploaded if project and project.results and project.results.metrics else '') }}">
+                </div>
+            </div>
+
+            <div class="form-group" style="margin-top: 0.5rem; margin-bottom: 0;">
+                <label for="results_notes" class="cdx-label">ملاحظات لجنة التحكيم أو المنظمين</label>
+                <textarea id="results_notes" name="results_notes" rows="2" class="cdx-textarea"
+                    placeholder="أي ملاحظات ختامية أو توصيات...">{{ (project.results.notes if project and project.results and project.results.notes else '') }}</textarea>
+            </div>
+        </div>
+
         <button type="submit" class="cdx-button cdx-button--action cdx-button--weight-primary">
             {% if project %}حفظ التعديلات{% else %}نشر النشاط المجتمعي{% endif %}
         </button>
@@ -190,6 +277,67 @@
 
 {% block scripts %}
 <script>
+    function syncStatusFromDates() {
+        const startInput = document.getElementById('start_date');
+        const endInput = document.getElementById('end_date');
+        const statusSelect = document.getElementById('status');
+        if (!startInput || !endInput || !statusSelect) return;
+
+        const startDateStr = startInput.value;
+        const endDateStr = endInput.value;
+        if (!startDateStr || !endDateStr) return;
+
+        if (endDateStr < startDateStr) {
+            endInput.setCustomValidity('تاريخ انتهاء النشاط لا يمكن أن يكون قبل تاريخ البدء');
+        } else {
+            endInput.setCustomValidity('');
+        }
+
+        const today = new Date();
+        const todayStr = today.getFullYear() + '-' +
+                         String(today.getMonth() + 1).padStart(2, '0') + '-' +
+                         String(today.getDate()).padStart(2, '0');
+
+        let targetStatus = 'In Progress';
+        if (todayStr < startDateStr) {
+            targetStatus = 'Planned';
+        } else if (todayStr > endDateStr) {
+            targetStatus = 'Completed';
+        } else {
+            targetStatus = 'In Progress';
+        }
+
+        const optPlanned = statusSelect.querySelector('option[value="Planned"]');
+        const optInProgress = statusSelect.querySelector('option[value="In Progress"]');
+        const optCompleted = statusSelect.querySelector('option[value="Completed"]');
+        const optCanceled = statusSelect.querySelector('option[value="Canceled"]');
+
+        if (optPlanned) optPlanned.disabled = (targetStatus !== 'Planned');
+        if (optInProgress) optInProgress.disabled = (targetStatus !== 'In Progress');
+        if (optCompleted) optCompleted.disabled = (targetStatus !== 'Completed');
+        if (optCanceled) optCanceled.disabled = false;
+
+        // Auto-select calculated status unless user chose Canceled
+        if (statusSelect.value !== 'Canceled') {
+            statusSelect.value = targetStatus;
+        }
+    }
+
+    function handleStatusManualChange(val) {
+        if (val !== 'Canceled') {
+            syncStatusFromDates();
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        syncStatusFromDates();
+    });
+
+    function toggleResultsSection() {
+        const isChecked = document.getElementById('toggle_results').checked;
+        document.getElementById('results-group').style.display = isChecked ? 'block' : 'none';
+    }
+
     function toggleJuryField() {
         const isChecked = document.getElementById('is_contest').checked;
         document.getElementById('jury-group').style.display = isChecked ? 'block' : 'none';

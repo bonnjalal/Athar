@@ -29,7 +29,13 @@
                 <h1 style="margin: 0; font-size: 1.75rem; color: #202122; line-height: 1.3;">{{ project.title }}</h1>
             </div>
 
-            <div style="display: flex; gap: 0.75rem; align-items: center;">
+            <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
+                <a href="{{ url_for('web.project_report', project_id=project.id) }}" target="_blank" class="cdx-button" title="طباعة أو حفظ كملف PDF">
+                    📄 طباعة تقرير PDF
+                </a>
+                <a href="{{ url_for('api.export_project_csv', project_id=project.id) }}" class="cdx-button" title="تنزيل قائمة المشاركين كملف CSV">
+                    📥 تصدير المشاركين CSV
+                </a>
                 {% if can_edit %}
                     <a href="{{ url_for('web.edit_project', project_id=project.id) }}" class="cdx-button cdx-button--action cdx-button--weight-primary">
                         تعديل النشاط
@@ -66,14 +72,21 @@
             </div>
 
             <div class="modal-meta-item">
-                <span class="meta-label">المنظم الرئيسي</span>
-                <span class="meta-val" style="font-weight: 600;">{{ project.lead_organizer }}</span>
+                <span class="meta-label">المنظمون</span>
+                <span class="meta-val" style="font-weight: 600;">{{ project.all_organizers|join('، ') if project.all_organizers else '—' }}</span>
             </div>
 
-            {% if project.co_organizers %}
+            {% if project.start_date %}
             <div class="modal-meta-item">
-                <span class="meta-label">المنظمون المشاركون</span>
-                <span class="meta-val">{{ project.co_organizers|join('، ') }}</span>
+                <span class="meta-label">تاريخ البدء</span>
+                <span class="meta-val">{{ project.start_date.strftime('%Y-%m-%d') }}</span>
+            </div>
+            {% endif %}
+
+            {% if project.end_date %}
+            <div class="modal-meta-item">
+                <span class="meta-label">تاريخ الانتهاء</span>
+                <span class="meta-val">{{ project.end_date.strftime('%Y-%m-%d') }}</span>
             </div>
             {% endif %}
 
@@ -107,6 +120,75 @@
                 {{ project.description|safe if project.description else '<em>لا توجد تفاصيل إضافية لهذا النشاط.</em>'|safe }}
             </div>
         </div>
+
+        <!-- Participants Roster -->
+        {% if project.participants %}
+        <div class="modal-participants-section" style="border-top: 1px solid #eaecf0; padding-top: 1.5rem; margin-top: 1.5rem;">
+            <h3 style="margin-top: 0; color: #202122; font-size: 1.2rem;">قائمة المشاركين ({{ project.participants|length }})</h3>
+            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.75rem;">
+                {% for part in project.participants %}
+                    <a href="{{ url_for('web.user_profile', username=part) }}" style="background: #f8f9fa; border: 1px solid #c8ccd1; border-radius: 20px; padding: 4px 12px; font-size: 0.88rem; color: #36c; text-decoration: none; display: inline-flex; align-items: center; gap: 6px;">
+                        <span>👤</span> {{ part }}
+                    </a>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Results & Outcomes -->
+        {% if project.results %}
+        <div class="modal-results-section" style="border-top: 1px solid #eaecf0; padding-top: 1.5rem; margin-top: 1.5rem;">
+            <h3 style="margin-top: 0; color: #202122; font-size: 1.2rem;">🏆 مخرجات ونتائج النشاط</h3>
+            
+            {% if project.results.summary %}
+            <p style="color: #333; line-height: 1.6; margin-bottom: 1rem;">
+                {{ project.results.summary }}
+            </p>
+            {% endif %}
+
+            {% if project.results.winners %}
+            <div style="background: #fdfaf2; border: 1px solid #f6e05e; border-radius: 8px; padding: 1rem 1.25rem; margin-bottom: 1rem;">
+                <h4 style="margin-top: 0; color: #b7791f; font-size: 0.95rem; margin-bottom: 0.5rem;">🥇 الفائزون في المسابقة:</h4>
+                <ol style="margin: 0; padding-right: 1.25rem;">
+                    {% for w in project.results.winners %}
+                        <li style="margin-bottom: 4px;">
+                            <a href="{{ url_for('web.user_profile', username=w) }}" style="color: #36c; font-weight: 600; text-decoration: none;">{{ w }}</a>
+                        </li>
+                    {% endfor %}
+                </ol>
+            </div>
+            {% endif %}
+
+            {% if project.results.metrics %}
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
+                {% if project.results.metrics.articles_created %}
+                <div style="background: #f8f9fa; border: 1px solid #eaecf0; border-radius: 8px; padding: 0.75rem; text-align: center;">
+                    <div style="font-size: 1.25rem; font-weight: bold; color: #202122;">{{ project.results.metrics.articles_created }}</div>
+                    <div style="font-size: 0.8rem; color: #54595d;">مقالات جديدة</div>
+                </div>
+                {% endif %}
+                {% if project.results.metrics.articles_improved %}
+                <div style="background: #f8f9fa; border: 1px solid #eaecf0; border-radius: 8px; padding: 0.75rem; text-align: center;">
+                    <div style="font-size: 1.25rem; font-weight: bold; color: #202122;">{{ project.results.metrics.articles_improved }}</div>
+                    <div style="font-size: 0.8rem; color: #54595d;">مقالات مطورة</div>
+                </div>
+                {% endif %}
+                {% if project.results.metrics.files_uploaded %}
+                <div style="background: #f8f9fa; border: 1px solid #eaecf0; border-radius: 8px; padding: 0.75rem; text-align: center;">
+                    <div style="font-size: 1.25rem; font-weight: bold; color: #202122;">{{ project.results.metrics.files_uploaded }}</div>
+                    <div style="font-size: 0.8rem; color: #54595d;">ملفات في كومنز</div>
+                </div>
+                {% endif %}
+            </div>
+            {% endif %}
+
+            {% if project.results.notes %}
+            <div style="font-size: 0.88rem; color: #54595d; font-style: italic; background: #fafafa; padding: 0.75rem; border-radius: 6px;">
+                <strong>ملاحظات:</strong> {{ project.results.notes }}
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
     </div>
 </div>
 {% endblock %}

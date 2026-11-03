@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 from config import Config
 from app import create_app, db
-from app.models import Community, User, CommunityMember, StatSnapshot
+from app.models import Community, User, CommunityMember, StatSnapshot, Project
 from scripts.parse_members import fetch_members_from_meta
 
 DEFAULT_USER_AGENT = "Athar/1.0 (https://athar.toolforge.org; bonnjalal@gmail.com)"
@@ -92,18 +92,20 @@ def sync_community(community):
         try:
             # 1. User resolution
             user = User.query.filter_by(username=username).first()
+            is_fresh = False
             if not user:
                 user = User(
                     username=username,
                     is_member=True,
                     first_seen=now,
-                    last_synced=now
+                    last_synced=None
                 )
                 db.session.add(user)
                 db.session.flush()
             else:
                 user.is_member = True
-                user.last_synced = now
+                if user.last_synced and (now - user.last_synced).total_seconds() < 4 * 3600:
+                    is_fresh = True
 
             # 2. Community membership resolution
             membership = CommunityMember.query.filter_by(
@@ -123,17 +125,19 @@ def sync_community(community):
             else:
                 membership.verified = True
 
-            # 3. Fetch global stats from CentralAuth
-            stats = fetch_global_stats(username)
-            if stats:
-                snapshot = StatSnapshot(
-                    user_id=user.id,
-                    total_edits=stats["total_edits"],
-                    home_wiki=stats["home_wiki"],
-                    wiki_breakdown=stats["wiki_breakdown"],
-                    recorded_at=now
-                )
-                db.session.add(snapshot)
+            # 3. Fetch global stats from CentralAuth if not fresh (< 4 hours)
+            if not is_fresh:
+                stats = fetch_global_stats(username)
+                if stats:
+                    snapshot = StatSnapshot(
+                        user_id=user.id,
+                        total_edits=stats["total_edits"],
+                        home_wiki=stats["home_wiki"],
+                        wiki_breakdown=stats["wiki_breakdown"],
+                        recorded_at=now
+                    )
+                    db.session.add(snapshot)
+                user.last_synced = now
 
             synced_count += 1
         except Exception as member_err:
@@ -143,6 +147,84 @@ def sync_community(community):
     db.session.commit()
     print(f"[Sync] Successfully synchronized {synced_count}/{len(usernames)} members for '{community.name}'.")
     return synced_count
+
+
+def sync_project_contributors():
+    """
+    Scans all projects in the database to discover contributors (lead organizers,
+    co-organizers, jury members, and participants).
+    Creates User records for newly discovered contributors and fetches their
+    CentralAuth global stats if not synced within the last 4 hours.
+    Returns the count of project contributors processed.
+    """
+    projects = Project.query.all()
+    unique_usernames = set()
+
+    for proj in projects:
+        if proj.lead_organizer:
+            unique_usernames.add(proj.lead_organizer.strip())
+        if proj.co_organizers and isinstance(proj.co_organizers, list):
+            for co in proj.co_organizers:
+                if co and isinstance(co, str):
+                    unique_usernames.add(co.strip())
+        if proj.jury_members and isinstance(proj.jury_members, list):
+            for jury in proj.jury_members:
+                if jury and isinstance(jury, str):
+                    unique_usernames.add(jury.strip())
+        if proj.participants and isinstance(proj.participants, list):
+            for part in proj.participants:
+                if part and isinstance(part, str):
+                    unique_usernames.add(part.strip())
+
+    unique_usernames.discard("")
+    if not unique_usernames:
+        print("[Sync] No project contributors found across existing projects.")
+        return 0
+
+    print(f"[Sync] Discovered {len(unique_usernames)} unique project contributor(s). Processing...")
+    now = datetime.utcnow()
+    synced_count = 0
+
+    for username in unique_usernames:
+        try:
+            user = User.query.filter_by(username=username).first()
+            is_fresh = False
+
+            if not user:
+                user = User(
+                    username=username,
+                    is_member=False,  # Discovered from projects, not formal community roster
+                    first_seen=now,
+                    last_synced=None
+                )
+                db.session.add(user)
+                db.session.flush()
+            else:
+                if user.last_synced and (now - user.last_synced).total_seconds() < 4 * 3600:
+                    is_fresh = True
+
+            if not is_fresh:
+                stats = fetch_global_stats(username)
+                if stats:
+                    snapshot = StatSnapshot(
+                        user_id=user.id,
+                        total_edits=stats["total_edits"],
+                        home_wiki=stats["home_wiki"],
+                        wiki_breakdown=stats["wiki_breakdown"],
+                        recorded_at=now
+                    )
+                    db.session.add(snapshot)
+                user.last_synced = now
+
+            synced_count += 1
+        except Exception as err:
+            print(f"[Warning] Error syncing project contributor '{username}': {err}")
+            continue
+
+    db.session.commit()
+    print(f"[Sync] Successfully processed {synced_count}/{len(unique_usernames)} project contributors.")
+    return synced_count
+
 
 def run_sync():
     """
@@ -175,6 +257,14 @@ def run_sync():
                 db.session.rollback()
                 print(f"[Error] Failed to process community '{community.name}': {comm_err}")
                 print("[Error] Isolated failure: continuing to next community.")
+
+        # Synchronize project contributors (organizers, jury, participants)
+        try:
+            print("\n--- Synchronizing Project Contributors ---")
+            sync_project_contributors()
+        except Exception as proj_err:
+            db.session.rollback()
+            print(f"[Error] Failed to process project contributors: {proj_err}")
 
         print("\n[Sync] Multi-community synchronization cycle complete.")
 

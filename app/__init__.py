@@ -24,7 +24,9 @@ def create_app(config_class=Config):
         db.create_all()
 
     # Register Jinja template filters for Arabic localization
-    from app.wiki_utils import translate_activity_type, translate_status
+    from app.wiki_utils import translate_activity_type, translate_status, build_xtools_user_url
+
+    app.jinja_env.globals['build_xtools_user_url'] = build_xtools_user_url
 
     @app.template_filter('ar_type')
     def arabic_type_filter(val):

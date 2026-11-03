@@ -5,9 +5,10 @@ from unittest.mock import patch, MagicMock
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+from datetime import datetime, timedelta
 from app import create_app, db
-from app.models import Community, User, CommunityMember, StatSnapshot
-from scripts.sync_data import fetch_global_stats, sync_community, run_sync
+from app.models import Community, User, CommunityMember, StatSnapshot, Project
+from scripts.sync_data import fetch_global_stats, sync_community, run_sync, sync_project_contributors
 
 from config import Config
 
@@ -172,6 +173,66 @@ class TestSyncData(unittest.TestCase):
             # Ensure comm1 records were saved
             u1 = User.query.filter_by(username="UserMorocco").first()
             self.assertIsNotNone(u1)
+
+    @patch("scripts.sync_data.fetch_members_from_meta")
+    @patch("scripts.sync_data.fetch_global_stats")
+    def test_sync_community_skips_fresh_user(self, mock_stats, mock_members):
+        with self.app.app_context():
+            # Create user synced 1 hour ago
+            one_hour_ago = datetime.utcnow() - timedelta(hours=1)
+            fresh_user = User(
+                username="FreshUser",
+                is_member=True,
+                first_seen=one_hour_ago,
+                last_synced=one_hour_ago
+            )
+            db.session.add(fresh_user)
+            db.session.commit()
+
+            mock_members.return_value = ["FreshUser"]
+            comm = Community.query.get(self.c1_id)
+            synced = sync_community(comm)
+            self.assertEqual(synced, 1)
+
+            # mock_stats should NOT have been called because user was synced < 4 hours ago
+            mock_stats.assert_not_called()
+
+    @patch("scripts.sync_data.fetch_global_stats")
+    def test_sync_project_contributors(self, mock_stats):
+        mock_stats.return_value = {
+            "total_edits": 100,
+            "home_wiki": "ar.wikipedia.org",
+            "wiki_breakdown": {"ar.wikipedia.org": 100}
+        }
+        with self.app.app_context():
+            # Create project with lead, co-org, jury, participant
+            p = Project(
+                title="Wiki Workshop",
+                description="<p>Test</p>",
+                lead_organizer="LeadUser",
+                co_organizers=["CoUser1", "CoUser2"],
+                jury_members=["JuryUser"],
+                participants=["PartUser1", "PartUser2"]
+            )
+            db.session.add(p)
+            db.session.commit()
+
+            count = sync_project_contributors()
+            self.assertEqual(count, 6)
+
+            # Check that User records were created with is_member=False
+            lead = User.query.filter_by(username="LeadUser").first()
+            self.assertIsNotNone(lead)
+            self.assertFalse(lead.is_member)
+
+            part = User.query.filter_by(username="PartUser1").first()
+            self.assertIsNotNone(part)
+            self.assertFalse(part.is_member)
+
+            # Check snapshots created
+            lead_snap = StatSnapshot.query.filter_by(user_id=lead.id).first()
+            self.assertIsNotNone(lead_snap)
+            self.assertEqual(lead_snap.total_edits, 100)
 
 if __name__ == "__main__":
     unittest.main()

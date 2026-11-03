@@ -26,7 +26,9 @@ const TYPE_TRANSLATIONS = {
 const STATUS_TRANSLATIONS = {
     "in progress": "جارية",
     "planned": "مخططة",
-    "completed": "مكتملة"
+    "completed": "مكتملة",
+    "canceled": "ملغاة",
+    "cancelled": "ملغاة"
 };
 
 function getCommunitySlug() {
@@ -102,6 +104,14 @@ function buildQueryParams() {
         params.set("filter_type", "all");
     }
 
+    const incProg = document.getElementById("include-in-progress");
+    const incPlan = document.getElementById("include-planned");
+    const incCanc = document.getElementById("include-canceled");
+
+    if (incProg) params.set("include_in_progress", incProg.checked ? "1" : "0");
+    if (incPlan) params.set("include_planned", incPlan.checked ? "1" : "0");
+    if (incCanc) params.set("include_canceled", incCanc.checked ? "1" : "0");
+
     return params;
 }
 
@@ -133,7 +143,17 @@ function getFilterDescriptionText() {
         periodText = "كافة الأنشطة (بدون قيد زمني)";
     }
 
-    return `المجموعة: ${commName} | ${periodText}`;
+    const incProg = document.getElementById("include-in-progress")?.checked;
+    const incPlan = document.getElementById("include-planned")?.checked;
+    const incCanc = document.getElementById("include-canceled")?.checked;
+
+    const statusParts = ["المكتملة"];
+    if (incProg) statusParts.push("الجارية");
+    if (incPlan) statusParts.push("المخطط لها");
+    if (incCanc) statusParts.push("الملغاة");
+    const statusText = `الحالات: ${statusParts.join(" + ")}`;
+
+    return `المجموعة: ${commName} | ${periodText} | ${statusText}`;
 }
 
 async function updateLivePreview() {
@@ -161,9 +181,23 @@ async function updateLivePreview() {
     const exportParams = new URLSearchParams(queryParams);
     exportParams.set("format", "csv");
     const exportUrl = `/api/${encodeURIComponent(slug)}/export?${exportParams.toString()}`;
+    const reportUrl = `/${encodeURIComponent(slug)}/report?${queryParams.toString()}`;
 
     if (directLink) {
         directLink.href = exportUrl;
+    }
+
+    const printReportBtn = document.getElementById("btn-print-report");
+    if (printReportBtn) {
+        printReportBtn.href = reportUrl;
+    }
+
+    const detailedParams = new URLSearchParams(queryParams);
+    detailedParams.set("detailed", "1");
+    const detailedReportUrl = `/${encodeURIComponent(slug)}/report?${detailedParams.toString()}`;
+    const printDetailedReportBtn = document.getElementById("btn-print-detailed-report");
+    if (printDetailedReportBtn) {
+        printDetailedReportBtn.href = detailedReportUrl;
     }
 
     if (badge) {

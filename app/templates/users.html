@@ -69,7 +69,7 @@
                                 <div style="display: flex; align-items: center;">
                                     <span class="user-avatar-badge">{{ m.username[0]|upper }}</span>
                                     <div>
-                                        <a href="https://meta.wikimedia.org/wiki/User:{{ m.username }}" target="_blank" rel="noopener" style="color: #36c; font-weight: 600; text-decoration: none;">
+                                        <a href="{{ url_for('web.user_profile', username=m.username) }}" style="color: #36c; font-weight: 600; text-decoration: none;">
                                             {{ m.username }}
                                         </a>
                                     </div>

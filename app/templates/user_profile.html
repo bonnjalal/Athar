@@ -1,0 +1,333 @@
+{% extends "base.html" %}
+
+{% block title %}المساهم: {{ user.username }} — أثر{% endblock %}
+
+{% block content %}
+<div class="user-profile-view" style="max-width: 1000px; margin: 2rem auto; padding: 0 1rem;">
+
+    <!-- Breadcrumb -->
+    <nav class="project-breadcrumbs" style="margin-bottom: 1.5rem; font-size: 0.9rem; color: #54595d;">
+        <a href="{{ url_for('web.index') }}" style="color: #36c; text-decoration: none;">الرئيسية</a>
+        <span style="margin: 0 0.5rem;">/</span>
+        <span style="color: #202122; font-weight: 600;">ملف المساهم: {{ user.username }}</span>
+    </nav>
+
+    <!-- Profile Header Card -->
+    <div
+        style="background: #ffffff; border: 1px solid #c8ccd1; border-radius: 12px; padding: 2rem; margin-bottom: 2rem; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);">
+        <div
+            style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 1.5rem;">
+            <div style="display: flex; gap: 1.25rem; align-items: center;">
+                <div
+                    style="width: 72px; height: 72px; background: #36c; color: #fff; font-size: 2rem; font-weight: bold; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(51, 102, 204, 0.3);">
+                    {{ user.username[0]|upper }}
+                </div>
+                <div>
+                    <h1 style="margin: 0; font-size: 1.85rem; color: #202122; line-height: 1.2;">{{ user.username }}
+                    </h1>
+                    <div style="display: flex; gap: 0.5rem; align-items: center; margin-top: 0.5rem; flex-wrap: wrap;">
+                        {% if user.is_member %}
+                        <span class="cdx-tab-badge"
+                            style="background: #eaf3ff; color: #36c; padding: 3px 10px; border-radius: 12px; font-size: 0.82rem; font-weight: 600;">
+                            عضو في مجتمع مسجل
+                        </span>
+                        {% else %}
+                        <span class="cdx-tab-badge"
+                            style="background: #f0f3f6; color: #54595d; padding: 3px 10px; border-radius: 12px; font-size: 0.82rem; font-weight: 500;">
+                            مشارك في أنشطة أثر
+                        </span>
+                        {% endif %}
+
+                        <span
+                            style="background: #edf7ed; color: #1e4620; padding: 3px 10px; border-radius: 12px; font-size: 0.82rem; font-weight: 500; display: inline-flex; align-items: center; gap: 4px;">
+                            <span>🕒</span> آخر تحديث للبيانات: {{ last_synced_relative }}
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Header Action Buttons -->
+            <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
+                <a href="{{ url_for('web.user_report', username=user.username) }}" target="_blank" class="cdx-button"
+                    title="طباعة أو حفظ كملف PDF ملخص">
+                    📄 تقرير ملخص (PDF)
+                </a>
+                <a href="{{ url_for('web.user_report', username=user.username, detailed=1) }}" target="_blank" class="cdx-button cdx-button--action"
+                    title="تقرير تفصيلي شامل لكافة الأنشطة والنتائج">
+                    📑 تقرير مفصل (PDF)
+                </a>
+                <a href="/api/users/{{ user.username }}/export?format=csv" class="cdx-button"
+                    title="تنزيل سجل الأنشطة كملف CSV">
+                    📥 تصدير CSV
+                </a>
+                <a href="https://meta.wikimedia.org/wiki/User:{{ user.username }}" target="_blank" rel="noopener"
+                    class="cdx-button cdx-button--quiet">
+                    صفحة Meta-Wiki ↗
+                </a>
+            </div>
+        </div>
+
+        {% if communities %}
+        <div
+            style="margin-top: 1.5rem; border-top: 1px solid #eaecf0; padding-top: 1rem; display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
+            <span style="font-size: 0.88rem; font-weight: 600; color: #54595d;">المجتمعات التابع لها:</span>
+            {% for comm in communities %}
+            <a href="{{ url_for('web.dashboard', slug=comm.slug) }}"
+                style="background: #f8f9fa; border: 1px solid #c8ccd1; border-radius: 16px; padding: 3px 12px; font-size: 0.85rem; color: #36c; text-decoration: none; font-weight: 500;">
+                🏛️ {{ comm.name }}
+            </a>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- KPI Summary Cards -->
+    <div class="stats-summary" style="margin-bottom: 2rem;">
+        <div class="kpi-card">
+            <span class="kpi-title">إجمالي التعديلات العالمية</span>
+            <span class="kpi-value">{{ "{:,}".format(snapshot.total_edits) if snapshot else '0' }}</span>
+        </div>
+        <div class="kpi-card">
+            <span class="kpi-title">المشروع الرئيسي</span>
+            <span class="kpi-value" style="font-size: 1.25rem;">{{ snapshot.home_wiki if snapshot else
+                'ar.wikipedia.org' }}</span>
+        </div>
+        <div class="kpi-card">
+            <span class="kpi-title">إجمالي الأنشطة المسجلة</span>
+            <span class="kpi-value">{{ total_user_projects }}</span>
+        </div>
+        <div class="kpi-card">
+            <span class="kpi-title">منظم</span>
+            <span class="kpi-value">{{ projects_by_role.organized|length }}</span>
+        </div>
+        <div class="kpi-card">
+            <span class="kpi-title">لجان تحكيم</span>
+            <span class="kpi-value">{{ projects_by_role.jury|length }}</span>
+        </div>
+        <div class="kpi-card">
+            <span class="kpi-title">مشارك</span>
+            <span class="kpi-value">{{ projects_by_role.participant|length }}</span>
+        </div>
+    </div>
+
+    <!-- Top 5 Wikis by Edit Count with Horizontal Line Charts -->
+    {% if top_wikis %}
+    <div class="top-wikis-card"
+        style="background: #ffffff; border: 1px solid #c8ccd1; border-radius: 12px; padding: 1.5rem; margin-bottom: 2rem; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);">
+        
+        <!-- Header -->
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem; border-bottom: 1px solid #eaecf0; padding-bottom: 0.85rem; margin-bottom: 1.25rem;">
+            <div>
+                <h3 style="margin: 0; font-size: 1.2rem; color: #202122; display: flex; align-items: center; gap: 8px;">
+                    <span>🌐 أبرز 5 مشاريع ويكيميديا للمساهم</span>
+                </h3>
+                <div style="font-size: 0.82rem; color: #72777d; margin-top: 4px;">
+                    توزيع حجم التعديلات بالمشاريع، وروابط مباشرة للتحليل الخارجي عبر أداة XTools
+                </div>
+            </div>
+            {% if total_top_edits %}
+            <div style="font-size: 0.85rem; font-weight: 600; color: #54595d; background: #f8f9fa; border: 1px solid #eaecf0; padding: 4px 12px; border-radius: 16px;">
+                مجموع مساهمات المشاريع: {{ "{:,}".format(total_top_edits) }} تعديل
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Overall Multi-Segment Summary Bar -->
+        <div style="margin-bottom: 1.5rem;">
+            <div class="wiki-multi-bar" style="display: flex; height: 8px; border-radius: 999px; overflow: hidden; background: #eaecf0; width: 100%; box-shadow: inset 0 1px 2px rgba(0,0,0,0.06);">
+                {% for item in top_wikis_data %}
+                <div style="width: {{ item.pct }}%; min-width: 3px; background-color: {{ item.color }};"
+                     title="{{ item.wiki }}: {{ '{:,}'.format(item.count) }} تعديل ({{ item.pct_str }})"></div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Horizontal Line Chart Items -->
+        <div class="wiki-charts-list" style="display: flex; flex-direction: column; gap: 0.85rem;">
+            {% for item in top_wikis_data %}
+            <div class="wiki-chart-item"
+                style="background: #fafafa; border: 1px solid #eaecf0; border-radius: 8px; padding: 0.85rem 1.25rem; transition: background 0.2s ease, border-color 0.2s ease;">
+                
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 0.5rem;">
+                    <!-- Project Rank and Name -->
+                    <div style="display: flex; align-items: center; gap: 0.6rem;">
+                        <span style="display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 50%; background-color: {{ item.color }}; color: #ffffff; font-size: 0.75rem; font-weight: 700;">
+                            {{ item.rank }}
+                        </span>
+                        <span style="font-size: 1rem; font-weight: 700; color: #202122;">
+                            {{ item.wiki }}
+                        </span>
+                        <span style="display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.78rem; font-weight: 600; color: {{ item.color }}; background-color: {{ item.tint }}; border: 1px solid {{ item.border }};">
+                            {{ item.pct_str }}
+                        </span>
+                    </div>
+
+                    <!-- Number of Edits & XTools Action Button -->
+                    <div style="display: flex; align-items: center; gap: 0.85rem;">
+                        <div style="font-size: 0.95rem; color: #202122;">
+                            <strong style="font-size: 1.05rem;">{{ "{:,}".format(item.count) }}</strong>
+                            <span style="font-size: 0.82rem; color: #72777d; margin-right: 2px;">تعديل</span>
+                        </div>
+                        <a href="{{ build_xtools_user_url(item.wiki, user.username) }}" target="_blank" rel="noopener"
+                            class="cdx-button cdx-button--quiet"
+                            style="font-size: 0.82rem; padding: 3px 10px; display: inline-flex; align-items: center; gap: 4px;"
+                            title="عرض تحليل المساهمات في {{ item.wiki }} عبر أداة XTools">
+                            <span>عرض في XTools</span>
+                            <span style="font-size: 0.85rem;">↗</span>
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Horizontal Line Bar Chart -->
+                <div style="position: relative; width: 100%; height: 9px; background: #e5e7eb; border-radius: 999px; overflow: hidden;">
+                    <div class="wiki-bar-fill"
+                        data-target-width="{{ item.bar_width }}%"
+                        style="width: {{ item.bar_width }}%; height: 100%; background: {{ item.color }}; border-radius: 999px; transition: width 0.8s cubic-bezier(0.2, 0.8, 0.2, 1);"
+                        title="{{ item.wiki }}: {{ '{:,}'.format(item.count) }} تعديل ({{ item.pct_str }})">
+                    </div>
+                </div>
+
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Filterable Projects Section -->
+    <div
+        style="background: #ffffff; border: 1px solid #c8ccd1; border-radius: 10px; padding: 1.5rem; margin-bottom: 2rem;">
+        <div
+            style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; border-bottom: 1px solid #eaecf0; padding-bottom: 1rem;">
+            <h3 style="margin: 0; font-size: 1.2rem; color: #202122;">سجل الأنشطة والمشاريع</h3>
+
+            <!-- Role Tabs Filter -->
+            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                <button onclick="filterRole('all')" class="cdx-button role-tab-btn active" id="btn-role-all">
+                    الكل ({{ projects_by_role.all|length }})
+                </button>
+                <button onclick="filterRole('org')" class="cdx-button role-tab-btn" id="btn-role-org">
+                    منظم ({{ projects_by_role.organized|length }})
+                </button>
+                <button onclick="filterRole('jury')" class="cdx-button role-tab-btn" id="btn-role-jury">
+                    تحكيم ({{ projects_by_role.jury|length }})
+                </button>
+                <button onclick="filterRole('participant')" class="cdx-button role-tab-btn" id="btn-role-participant">
+                    مشارك ({{ projects_by_role.participant|length }})
+                </button>
+            </div>
+        </div>
+
+        {% if projects_by_role.all %}
+        <table class="users-table" style="margin-top: 1.25rem;" id="user-projects-table">
+            <thead>
+                <tr>
+                    <th style="width: 40px; text-align: center;">#</th>
+                    <th>عنوان النشاط</th>
+                    <th>المجتمع</th>
+                    <th>الدور</th>
+                    <th>النوع</th>
+                    <th>المشروع المستهدف</th>
+                    <th>التاريخ</th>
+                    <th style="text-align: center;">التفاصيل</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for p in projects_by_role.all %}
+                <tr class="project-item-row" data-is-org="{{ '1' if p in projects_by_role.organized else '0' }}"
+                    data-is-jury="{{ '1' if p in projects_by_role.jury else '0' }}"
+                    data-is-part="{{ '1' if p in projects_by_role.participant else '0' }}">
+                    <td style="text-align: center; color: #72777d;">{{ loop.index }}</td>
+                    <td style="font-weight: 600;">
+                        <a href="{{ url_for('web.view_project', project_id=p.id) }}"
+                            style="color: #36c; text-decoration: none;">
+                            {{ p.title }}
+                        </a>
+                    </td>
+                    <td>{{ p.community.name if p.community else 'عام' }}</td>
+                    <td>
+                        {% if p in projects_by_role.organized %}
+                        <span class="cdx-tab-badge"
+                            style="background: #eaf3ff; color: #1e3a8a; font-weight: 600; padding: 2px 8px; border-radius: 4px; font-size: 0.8rem;">منظم</span>
+                        {% elif p in projects_by_role.jury %}
+                        <span class="cdx-tab-badge"
+                            style="background: #fdfaf2; color: #b7791f; font-weight: 600; padding: 2px 8px; border-radius: 4px; font-size: 0.8rem;">لجنة
+                            تحكيم</span>
+                        {% else %}
+                        <span class="cdx-tab-badge"
+                            style="background: #edf7ed; color: #1e4620; font-weight: 500; padding: 2px 8px; border-radius: 4px; font-size: 0.8rem;">مشارك</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ p.project_type }}</td>
+                    <td>{{ p.target_wiki }}</td>
+                    <td style="font-size: 0.85rem; color: #54595d;">
+                        {{ p.start_date.strftime('%Y-%m-%d') if p.start_date else '—' }}
+                    </td>
+                    <td style="text-align: center;">
+                        <a href="{{ url_for('web.view_project', project_id=p.id) }}"
+                            class="cdx-button cdx-button--quiet" style="font-size: 0.82rem; padding: 3px 10px;">
+                            عرض النشاط
+                        </a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p style="color: #72777d; font-style: italic; margin-top: 1.5rem;">لا توجد أنشطة مسجلة لهذا المساهم في قاعدة
+            البيانات.</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+        // Animate horizontal bar fills smoothly on load
+        const barFills = document.querySelectorAll(".wiki-bar-fill");
+        barFills.forEach(bar => {
+            const target = bar.getAttribute("data-target-width");
+            if (target) {
+                bar.style.width = "0%";
+                requestAnimationFrame(() => {
+                    setTimeout(() => {
+                        bar.style.width = target;
+                    }, 80);
+                });
+            }
+        });
+    });
+
+    function filterRole(role) {
+        document.querySelectorAll('.role-tab-btn').forEach(btn => btn.classList.remove('active'));
+        const activeBtn = document.getElementById('btn-role-' + role);
+        if (activeBtn) activeBtn.classList.add('active');
+
+        const rows = document.querySelectorAll('.project-item-row');
+        rows.forEach(row => {
+            if (role === 'all') {
+                row.style.display = '';
+            } else if (role === 'org' && row.getAttribute('data-is-org') === '1') {
+                row.style.display = '';
+            } else if (role === 'jury' && row.getAttribute('data-is-jury') === '1') {
+                row.style.display = '';
+            } else if (role === 'participant' && row.getAttribute('data-is-part') === '1') {
+                row.style.display = '';
+            } else {
+                row.style.display = 'none';
+            }
+        });
+    }
+</script>
+<style>
+    .role-tab-btn.active {
+        background-color: #36c !important;
+        color: #ffffff !important;
+        border-color: #36c !important;
+    }
+    .wiki-chart-item:hover {
+        background: #f0f3f6 !important;
+        border-color: #a2a9b1 !important;
+    }
+</style>
+{% endblock %}

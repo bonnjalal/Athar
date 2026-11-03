@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}تقرير أثر — تقرير الأنشطة والمساهمات{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+    <style>
+        body {
+            background-color: #f8f9fa;
+            color: #202122;
+            font-family: system-ui, -apple-system, 'Segoe UI', Tahoma, Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            line-height: 1.6;
+        }
+
+        .report-page-container {
+            max-width: 900px;
+            margin: 2rem auto;
+            background: #ffffff;
+            border: 1px solid #c8ccd1;
+            border-radius: 8px;
+            padding: 2.5rem;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+        }
+
+        .report-header {
+            border-bottom: 2px solid #36c;
+            padding-bottom: 1.25rem;
+            margin-bottom: 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+
+        .report-brand {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #36c;
+            margin: 0;
+        }
+
+        .report-subtitle {
+            font-size: 0.9rem;
+            color: #54595d;
+            margin: 4px 0 0 0;
+        }
+
+        .report-meta-timestamp {
+            font-size: 0.85rem;
+            color: #72777d;
+            text-align: left;
+        }
+
+        .report-action-bar {
+            background: #eaf3ff;
+            border: 1px solid #a2c8f8;
+            border-radius: 8px;
+            padding: 1rem 1.5rem;
+            margin-bottom: 1.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .report-card,
+        tr,
+        .kpi-tile {
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+        }
+
+        .report-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+            font-size: 0.92rem;
+        }
+
+        .report-table th,
+        .report-table td {
+            border: 1px solid #c8ccd1;
+            padding: 8px 12px;
+            text-align: right;
+        }
+
+        .report-table th {
+            background-color: #eaecf0;
+            font-weight: 600;
+            color: #202122;
+        }
+
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 1rem;
+            margin: 1.5rem 0;
+        }
+
+        .kpi-tile {
+            background: #f8f9fa;
+            border: 1px solid #c8ccd1;
+            border-radius: 6px;
+            padding: 1rem;
+            text-align: center;
+        }
+
+        .kpi-tile-val {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #202122;
+        }
+
+        .kpi-tile-lbl {
+            font-size: 0.85rem;
+            color: #54595d;
+            margin-top: 4px;
+        }
+
+        .project-status {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.78rem;
+            font-weight: 600;
+            border: 1px solid transparent;
+        }
+
+        .project-status--in-progress {
+            background: #ecfdf5;
+            color: #047857;
+            border-color: #a7f3d0;
+        }
+
+        .project-status--completed {
+            background: #eff6ff;
+            color: #1d4ed8;
+            border-color: #bfdbfe;
+        }
+
+        .project-status--planned {
+            background: #f8fafc;
+            color: #475569;
+            border-color: #e2e8f0;
+        }
+
+        .project-status--canceled,
+        .project-status--cancelled {
+            background: #fef2f2;
+            color: #b91c1c;
+            border-color: #fecaca;
+        }
+
+        .project-type-badge {
+            display: inline-block;
+            background: #f0f3f6;
+            color: #202122;
+            font-size: 0.8rem;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-weight: 500;
+        }
+
+        @page {
+            size: A4 portrait;
+            margin: 15mm;
+        }
+
+        @media print {
+            body {
+                background: #ffffff !important;
+                color: #000000 !important;
+            }
+
+            .no-print {
+                display: none !important;
+            }
+
+            .report-page-container {
+                max-width: 100% !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                border: none !important;
+                box-shadow: none !important;
+            }
+
+            .report-card,
+            tr,
+            .kpi-tile {
+                break-inside: avoid !important;
+                page-break-inside: avoid !important;
+            }
+
+            * {
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div style="max-width: 900px; margin: 1.5rem auto 0 auto;" class="no-print">
+        <div class="report-action-bar">
+            <div>
+                <strong>تقرير جاهز للطباعة / التصدير</strong>
+                <div style="font-size: 0.85rem; color: #54595d;">يمكنك استخدام خيار الطباعة في متصفحك لحفظ هذا التقرير
+                    كملف PDF عالي الجودة.</div>
+            </div>
+            <div style="display: flex; gap: 0.75rem;">
+                <button onclick="window.print()" class="cdx-button cdx-button--action cdx-button--weight-primary"
+                    style="cursor: pointer; padding: 8px 16px; font-weight: 600;">
+                    🖨️ طباعة / حفظ كملف PDF
+                </button>
+                <button onclick="window.close()" class="cdx-button" style="cursor: pointer; padding: 8px 16px;">
+                    إغلاق
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="report-page-container">
+        <header class="report-header">
+            <div>
+                <h1 class="report-brand">أثَر | Athar</h1>
+                <p class="report-subtitle">منصة تتبع ومتابعة أنشطة مجتمعات ويكيميديا الإقليمية</p>
+            </div>
+            <div class="report-meta-timestamp">
+                <div><strong>تاريخ التوليد:</strong></div>
+                <div>{{ generated_at.strftime('%Y-%m-%d %H:%M UTC') if generated_at else '' }}</div>
+            </div>
+        </header>
+
+        <main>
+            {% block report_body %}{% endblock %}
+        </main>
+    </div>
+
+    {% if auto_print %}
+    <script>
+        window.addEventListener('load', function () {
+            setTimeout(function () {
+                window.print();
+            }, 300);
+        });
+    </script>
+    {% endif %}
+</body>
+
+</html>
