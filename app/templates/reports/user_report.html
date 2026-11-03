@@ -1,0 +1,261 @@
+{% extends "reports/base_report.html" %}
+
+{% block title %}{% if detailed %}التقرير المفصل{% else %}تقرير السجل{% endif %}: {{ user.username }} — أثر{% endblock %}
+
+{% block report_body %}
+<div class="report-section">
+    <div style="margin-bottom: 1.5rem;">
+        <span
+            style="display: inline-block; background: #eaf3ff; color: #36c; font-weight: 600; font-size: 0.85rem; padding: 2px 8px; border-radius: 4px; margin-bottom: 6px;">
+            {% if detailed %}التقرير المفصل لأنشطة ومساهمات المساهم{% else %}ملف إنجاز المساهم{% endif %}
+        </span>
+        <h2 style="margin: 0.25rem 0 0.25rem 0; font-size: 1.6rem; color: #202122;">{{ user.username }}</h2>
+        <div style="font-size: 0.95rem; color: #54595d;">
+            <strong>الحالة في النظام:</strong> {{ 'عضو في مجتمع معتمد' if user.is_member else 'مشارك في أنشطة مجتمعية' }}
+        </div>
+    </div>
+
+    <!-- KPI Summary Grid -->
+    <div class="kpi-grid">
+        <div class="kpi-tile">
+            <div class="kpi-tile-val">
+                {% if snapshot and snapshot.total_edits is not none %}
+                {{ "{:,}".format(snapshot.total_edits) }}
+                {% else %}
+                —
+                {% endif %}
+            </div>
+            <div class="kpi-tile-lbl">إجمالي التعديلات العامة</div>
+        </div>
+        <div class="kpi-tile">
+            <div class="kpi-tile-val">{{ (projects_by_role.all|length) if projects_by_role.all else 0 }}</div>
+            <div class="kpi-tile-lbl">إجمالي الأنشطة المشارك بها</div>
+        </div>
+        <div class="kpi-tile">
+            <div class="kpi-tile-val">
+                {{ projects_by_role.organized|length }}
+            </div>
+            <div class="kpi-tile-lbl">منظم (أنشطة نظمها)</div>
+        </div>
+        <div class="kpi-tile">
+            <div class="kpi-tile-val">{{ (projects_by_role.jury|length) if projects_by_role.jury else 0 }}</div>
+            <div class="kpi-tile-lbl">لجان تحكيم</div>
+        </div>
+        <div class="kpi-tile">
+            <div class="kpi-tile-val">{{ (projects_by_role.participant|length) if projects_by_role.participant else 0 }}</div>
+            <div class="kpi-tile-lbl">مشاركات كمتطوع</div>
+        </div>
+    </div>
+
+    <!-- Top 5 Wikis Table -->
+    {% if top_wikis %}
+    <div class="report-card" style="margin-top: 2rem;">
+        <h3
+            style="margin-top: 0; font-size: 1.15rem; color: #202122; border-bottom: 1px solid #c8ccd1; padding-bottom: 6px;">
+            أبرز مشاريع ويكيميديا حسب حجم المساهمات
+        </h3>
+        <table class="report-table">
+            <thead>
+                <tr>
+                    <th style="width: 50px; text-align: center;">#</th>
+                    <th>مشروع ويكيميديا</th>
+                    <th>عدد التعديلات</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for wiki, count in top_wikis %}
+                <tr>
+                    <td style="text-align: center;">{{ loop.index }}</td>
+                    <td style="font-weight: 600;">{{ wiki }}</td>
+                    <td>{{ "{:,}".format(count) }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+
+    <!-- Itemized Project Ledger -->
+    <div class="report-card" style="margin-top: 2rem;">
+        <h3
+            style="margin-top: 0; font-size: 1.15rem; color: #202122; border-bottom: 1px solid #c8ccd1; padding-bottom: 6px;">
+            سجل المشاريع والأنشطة المجتمعية
+        </h3>
+        {% if projects_by_role.all %}
+        <table class="report-table">
+            <thead>
+                <tr>
+                    <th style="width: 40px; text-align: center;">#</th>
+                    <th>عنوان النشاط</th>
+                    <th>المجتمع</th>
+                    <th>الدور</th>
+                    <th>الحالة</th>
+                    <th>المشروع المستهدف</th>
+                    <th>التاريخ</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for p in projects_by_role.all %}
+                <tr>
+                    <td style="text-align: center;">{{ loop.index }}</td>
+                    <td style="font-weight: 600;">{{ p.title }}</td>
+                    <td>{{ p.community.name if p.community else 'عام' }}</td>
+                    <td>
+                        {% if p in projects_by_role.organized %}
+                        <span style="color: #1e3a8a; font-weight: 600;">منظم</span>
+                        {% elif p in projects_by_role.jury %}
+                        <span style="color: #b7791f; font-weight: 600;">لجنة تحكيم</span>
+                        {% else %}
+                        <span>مشارك</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ p.status_ar }}</td>
+                    <td>{{ p.target_wiki }}</td>
+                    <td style="font-size: 0.85rem; color: #54595d;">
+                        {{ p.start_date.strftime('%Y-%m-%d') if p.start_date else '—' }}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p style="color: #72777d; font-style: italic; margin-top: 1rem;">لا توجد أنشطة مسجلة لهذا المساهم في قاعدة
+            البيانات.</p>
+        {% endif %}
+    </div>
+
+    <!-- Detailed Activity Dossiers (rendered when detailed=1) -->
+    {% if detailed and projects_by_role.all %}
+    <div style="margin-top: 2.5rem;">
+        <h3 style="font-size: 1.3rem; color: #202122; border-bottom: 2px solid #36c; padding-bottom: 8px; margin-bottom: 1.5rem;">
+            تفاصيل الأنشطة والمشاريع المشارك بها ({{ projects_by_role.all|length }})
+        </h3>
+
+        {% for p in projects_by_role.all %}
+        <div class="report-card" style="margin-bottom: 2rem; page-break-inside: avoid; border: 1px solid #c8ccd1; border-radius: 8px; padding: 1.5rem;">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem; border-bottom: 1px solid #eaecf0; padding-bottom: 0.75rem;">
+                <div>
+                    <span style="font-size: 0.85rem; color: #54595d; font-weight: bold;">نشاط #{{ loop.index }}</span>
+                    <h3 style="margin: 0.25rem 0; font-size: 1.35rem; color: #202122;">{{ p.title }}</h3>
+                </div>
+                <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+                    <span class="project-type-badge">{{ p.project_type }}</span>
+                    <span class="project-status project-status--{{ p.status.lower().replace(' ', '-') }}">{{ p.status_ar }}</span>
+                    {% if p.is_contest %}
+                    <span style="background: #fef3c7; color: #92400e; font-size: 0.8rem; font-weight: 600; padding: 2px 8px; border-radius: 4px;">مسابقة ومنافسة</span>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Metadata Table -->
+            <table class="report-table" style="margin-bottom: 1rem;">
+                <tr>
+                    <th style="width: 20%;">المجتمع:</th>
+                    <td style="width: 30%;">{{ p.community.name if p.community else 'عام' }}</td>
+                    <th style="width: 20%;">المشروع المستهدف:</th>
+                    <td style="width: 30%;">{{ p.target_wiki }}</td>
+                </tr>
+                <tr>
+                    <th>دور المساهم في النشاط:</th>
+                    <td>
+                        {% if p in projects_by_role.organized %}
+                        <span style="color: #1e3a8a; font-weight: 600;">منظم</span>
+                        {% elif p in projects_by_role.jury %}
+                        <span style="color: #b7791f; font-weight: 600;">لجنة تحكيم</span>
+                        {% else %}
+                        <span>مشارك</span>
+                        {% endif %}
+                    </td>
+                    <th>الفترة الزمنية:</th>
+                    <td>
+                        {% if p.start_date and p.end_date %}
+                            {{ p.start_date.strftime('%Y-%m-%d') }} إلى {{ p.end_date.strftime('%Y-%m-%d') }}
+                        {% elif p.start_date %}
+                            منذ {{ p.start_date.strftime('%Y-%m-%d') }}
+                        {% else %}
+                            غير محدد
+                        {% endif %}
+                    </td>
+                </tr>
+                <tr>
+                    <th>كافة المنظمين:</th>
+                    <td colspan="3">{{ p.all_organizers|join('، ') if p.all_organizers else '—' }}</td>
+                </tr>
+                {% if p.is_contest and p.jury_members %}
+                <tr>
+                    <th>لجنة التحكيم:</th>
+                    <td colspan="3">{{ p.jury_members|join('، ') }}</td>
+                </tr>
+                {% endif %}
+            </table>
+
+            <!-- Activity Description -->
+            <div style="margin-bottom: 1rem;">
+                <h4 style="margin: 0 0 0.4rem 0; font-size: 0.95rem; color: #54595d;">تفاصيل ووصف النشاط:</h4>
+                <div style="line-height: 1.7; color: #202122; font-size: 0.95rem; background: #fafafa; padding: 0.75rem 1rem; border-radius: 4px; border: 1px solid #eaecf0;">
+                    {{ p.description|safe if p.description else '<em>لا يوجد وصف متاح.</em>'|safe }}
+                </div>
+            </div>
+
+            <!-- Participants -->
+            {% if p.participants %}
+            <div style="margin-bottom: 1rem;">
+                <h4 style="margin: 0 0 0.4rem 0; font-size: 0.95rem; color: #54595d;">المشاركون المسجلون ({{ p.participants|length }}):</h4>
+                <div style="line-height: 1.6; font-size: 0.9rem; color: #202122; background: #fff; padding: 0.5rem 0.75rem; border: 1px solid #e2e8f0; border-radius: 4px;">
+                    {{ p.participants|join('، ') }}
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Competition Results & Outcomes -->
+            {% if p.results %}
+            <div style="background: #fdfdfd; border: 1px solid #e2e8f0; border-radius: 6px; padding: 1rem; margin-top: 1rem;">
+                <h4 style="margin: 0 0 0.5rem 0; font-size: 1rem; color: #b7791f;">🏆 نتائج ومخرجات النشاط:</h4>
+                {% if p.results.summary %}
+                <p style="margin: 0 0 0.75rem 0; font-size: 0.9rem; color: #333; line-height: 1.6;">
+                    <strong>الملخص التنفيذي:</strong> {{ p.results.summary }}
+                </p>
+                {% endif %}
+
+                {% if p.results.metrics %}
+                <div class="kpi-grid" style="grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); margin-bottom: 0.75rem;">
+                    {% if p.results.metrics.articles_created %}
+                    <div class="kpi-tile" style="padding: 0.75rem;">
+                        <div class="kpi-tile-val" style="font-size: 1.25rem;">{{ p.results.metrics.articles_created }}</div>
+                        <div class="kpi-tile-lbl" style="font-size: 0.8rem;">مقالات جديدة</div>
+                    </div>
+                    {% endif %}
+                    {% if p.results.metrics.articles_improved %}
+                    <div class="kpi-tile" style="padding: 0.75rem;">
+                        <div class="kpi-tile-val" style="font-size: 1.25rem;">{{ p.results.metrics.articles_improved }}</div>
+                        <div class="kpi-tile-lbl" style="font-size: 0.8rem;">مقالات مطورة</div>
+                    </div>
+                    {% endif %}
+                    {% if p.results.metrics.files_uploaded %}
+                    <div class="kpi-tile" style="padding: 0.75rem;">
+                        <div class="kpi-tile-val" style="font-size: 1.25rem;">{{ p.results.metrics.files_uploaded }}</div>
+                        <div class="kpi-tile-lbl" style="font-size: 0.8rem;">ملفات كومنز</div>
+                    </div>
+                    {% endif %}
+                </div>
+                {% endif %}
+
+                {% if p.results.winners %}
+                <div style="margin-top: 0.5rem; font-size: 0.9rem;">
+                    <strong>الفائزون:</strong> {{ p.results.winners|join('، ') }}
+                </div>
+                {% endif %}
+
+                {% if p.results.notes %}
+                <div style="margin-top: 0.5rem; font-size: 0.85rem; color: #54595d; font-style: italic;">
+                    <strong>ملاحظات:</strong> {{ p.results.notes }}
+                </div>
+                {% endif %}
+            </div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

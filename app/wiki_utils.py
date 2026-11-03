@@ -3,7 +3,7 @@ Wikimedia project normalization, validation, and URL generation.
 Ensures strict security against SSRF, open-redirects, and broken hostnames.
 """
 import re
-from urllib.parse import urlparse
+from urllib.parse import urlparse, quote
 
 # Whitelisted Wikimedia root domains (must strictly end with one of these)
 ALLOWED_WIKIMEDIA_DOMAINS = (
@@ -151,7 +151,11 @@ STATUS_ARABIC = {
     "Planned": "مخططة",
     "planned": "مخططة",
     "Completed": "مكتملة",
-    "completed": "مكتملة"
+    "completed": "مكتملة",
+    "Canceled": "ملغاة",
+    "canceled": "ملغاة",
+    "Cancelled": "ملغاة",
+    "cancelled": "ملغاة"
 }
 
 
@@ -219,4 +223,21 @@ def determine_project_status(start_date=None, end_date=None, requested_status=No
         return "In Progress"
 
     return "In Progress"
+
+
+def build_xtools_user_url(wiki_code: str, username: str) -> str:
+    """
+    Constructs an outbound URL to XTools Edit Counter for a given user and wiki.
+    Normalizes the wiki code to MediaWiki dbname format (e.g. 'arwiki').
+    Example:
+        build_xtools_user_url("ar.wikipedia.org", "Bonnjalal00")
+        -> "https://xtools.wmcloud.org/ec/arwiki/Bonnjalal00"
+    """
+    clean_code = (wiki_code or "arwiki").strip()
+    try:
+        clean_code, _ = normalize_wiki_target(clean_code)
+    except ValueError:
+        pass
+    clean_user = (username or "").strip().replace(" ", "_")
+    return f"https://xtools.wmcloud.org/ec/{clean_code}/{quote(clean_user)}"
 

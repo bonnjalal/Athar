@@ -92,15 +92,9 @@
                                         <bdi class="project-meta-val">{{ proj.target_wiki }}</bdi>
                                     </div>
                                     <div class="project-meta-row">
-                                        <span class="project-meta-label">المنظم الرئيسي:</span>
-                                        <bdi class="project-meta-val">{{ proj.lead_organizer }}</bdi>
+                                        <span class="project-meta-label">المنظمون:</span>
+                                        <bdi class="project-meta-val">{{ proj.all_organizers|join('، ') if proj.all_organizers else '—' }}</bdi>
                                     </div>
-                                    {% if proj.co_organizers %}
-                                        <div class="project-meta-row">
-                                            <span class="project-meta-label">منظمون مشاركون:</span>
-                                            <bdi class="project-meta-val">{{ proj.co_organizers|join('، ') }}</bdi>
-                                        </div>
-                                    {% endif %}
                                 </div>
                             </div>
                             <div class="project-card-footer-bar">
@@ -145,10 +139,10 @@
                         <span class="meta-val" id="modal-target-wiki">-</span>
                     </div>
                     <div class="modal-meta-item">
-                        <span class="meta-label">المنظم الرئيسي:</span>
+                        <span class="meta-label">المنظمون:</span>
                         <span class="meta-val" id="modal-lead-organizer">-</span>
                     </div>
-                    <div class="modal-meta-item" id="modal-co-orgs-item">
+                    <div class="modal-meta-item" id="modal-co-orgs-item" style="display: none;">
                         <span class="meta-label">المنظمون المشاركون:</span>
                         <span class="meta-val" id="modal-co-organizers">-</span>
                     </div>

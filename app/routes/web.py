@@ -2,7 +2,7 @@ import re
 import bleach
 import threading
 from sqlalchemy import func
-from flask import Blueprint, render_template, request, redirect, url_for, flash, session, current_app
+from flask import Blueprint, render_template, request, redirect, url_for, flash, session, current_app, abort
 from app import db
 from datetime import datetime
 from app.models import Project, User, StatSnapshot, Community, CommunityMember
@@ -10,6 +10,13 @@ from app.oauth import member_required, project_editor_required, get_current_user
 from app.wiki_utils import normalize_wiki_target
 
 web_bp = Blueprint("web", __name__)
+
+RESERVED_SLUGS = {"user", "project", "export", "api", "auth", "static", "admin"}
+
+
+def is_reserved_slug(slug: str) -> bool:
+    """Check if a slug collides with core system routes."""
+    return (slug or "").lower().strip() in RESERVED_SLUGS
 
 
 def _async_sync_community(app, community_id):
@@ -74,10 +81,10 @@ def add_community():
         flash(f"المجتمع '{name}' مسجل مسبقاً في قاعدة البيانات.", "info")
         return redirect(url_for("web.dashboard", slug=existing.slug))
 
-    # Ensure unique slug
+    # Ensure unique and unreserved slug
     slug = base_slug
     counter = 1
-    while Community.query.filter_by(slug=slug).first():
+    while is_reserved_slug(slug) or Community.query.filter_by(slug=slug).first():
         slug = f"{base_slug}-{counter}"
         counter += 1
 
@@ -109,6 +116,8 @@ def add_community():
 @web_bp.route("/<slug>/")
 def dashboard(slug):
     """Community-specific dashboard view querying database records."""
+    if is_reserved_slug(slug):
+        abort(404)
     user = get_current_user()
 
     community = Community.query.filter_by(slug=slug).first()
@@ -161,6 +170,8 @@ def dashboard(slug):
 @web_bp.route("/<slug>/activities")
 def community_activities(slug):
     """Dedicated activities page with full filtering and search."""
+    if is_reserved_slug(slug):
+        abort(404)
     user = get_current_user()
     community = Community.query.filter_by(slug=slug).first_or_404()
     session['community_slug'] = community.slug
@@ -191,6 +202,8 @@ def community_activities(slug):
 @web_bp.route("/<slug>/users")
 def community_users(slug):
     """Dedicated members page with real-time search, roles and metrics."""
+    if is_reserved_slug(slug):
+        abort(404)
     user = get_current_user()
     community = Community.query.filter_by(slug=slug).first_or_404()
     session['community_slug'] = community.slug
@@ -229,6 +242,8 @@ def community_users(slug):
 @web_bp.route("/<slug>/sync", methods=["POST"])
 def manual_sync(slug):
     """Trigger manual member synchronization for a community from Meta-Wiki."""
+    if is_reserved_slug(slug):
+        abort(404)
     community = Community.query.filter_by(slug=slug).first_or_404()
     from scripts.sync_data import sync_community
     try:
@@ -237,6 +252,66 @@ def manual_sync(slug):
     except Exception as e:
         flash(f"خطأ أثناء تحديث بيانات المجتمع: {str(e)}", "error")
     return redirect(url_for("web.dashboard", slug=community.slug))
+
+def _parse_date(date_str):
+    """Safely parse YYYY-MM-DD date string into a datetime.date object."""
+    if not date_str or not str(date_str).strip():
+        return None
+    try:
+        return datetime.strptime(str(date_str).strip(), "%Y-%m-%d").date()
+    except (ValueError, TypeError):
+        return None
+
+
+def _parse_participants(raw_text):
+    """Parse line-by-line or comma-separated usernames into a deduplicated list."""
+    if not raw_text:
+        return []
+    result = []
+    for line in re.split(r'[\r\n,]+', str(raw_text)):
+        cleaned = line.strip().replace("_", " ")
+        if cleaned and cleaned not in result:
+            result.append(cleaned)
+    return result
+
+
+def _parse_results(form):
+    """Extract structured results dictionary from form inputs with Bleach sanitization."""
+    summary = bleach.clean(form.get("results_summary", "").strip(), strip=True)
+    notes = bleach.clean(form.get("results_notes", "").strip(), strip=True)
+
+    winners_raw = form.get("results_winners", "")
+    winners = []
+    for line in re.split(r'[\r\n,]+', str(winners_raw)):
+        w = line.strip().replace("_", " ")
+        if w and w not in winners:
+            winners.append(w)
+
+    def _safe_int(key):
+        try:
+            return max(0, int(form.get(key) or 0))
+        except (ValueError, TypeError):
+            return 0
+
+    articles_created = _safe_int("results_articles_created")
+    articles_improved = _safe_int("results_articles_improved")
+    files_uploaded = _safe_int("results_files_uploaded")
+
+    has_content = bool(summary or winners or articles_created or articles_improved or files_uploaded or notes)
+    if not has_content:
+        return None
+
+    return {
+        "summary": summary,
+        "winners": winners,
+        "metrics": {
+            "articles_created": articles_created,
+            "articles_improved": articles_improved,
+            "files_uploaded": files_uploaded
+        },
+        "notes": notes
+    }
+
 
 @web_bp.route("/project/new", methods=["GET", "POST"])
 @member_required
@@ -260,25 +335,6 @@ def create_project():
         except ValueError as err:
             flash(str(err), "error")
             return render_template("project_form.html", project=None, communities=communities, selected_community_slug=session.get("community_slug")), 400
-
-        start_date_val = None
-        end_date_val = None
-        raw_start = (request.form.get("start_date") or "").strip()
-        raw_end = (request.form.get("end_date") or "").strip()
-        if raw_start:
-            try:
-                start_date_val = datetime.strptime(raw_start, "%Y-%m-%d").date()
-            except ValueError:
-                pass
-        if raw_end:
-            try:
-                end_date_val = datetime.strptime(raw_end, "%Y-%m-%d").date()
-            except ValueError:
-                pass
-
-        raw_status = (request.form.get("status") or "auto").strip()
-        from app.wiki_utils import determine_project_status
-        status = determine_project_status(start_date_val, end_date_val, raw_status)
 
         co_orgs_raw = request.form.get("co_organizers", "")
         is_contest = bool(request.form.get("is_contest"))
@@ -310,6 +366,29 @@ def create_project():
 
         co_organizers = [u.strip() for u in co_orgs_raw.split(",") if u.strip()]
         jury_members = [j.strip() for j in jury_raw.split(",") if j.strip()] if is_contest else []
+        participants = _parse_participants(request.form.get("participants", ""))
+        results = _parse_results(request.form)
+        start_date = _parse_date(request.form.get("start_date"))
+        end_date = _parse_date(request.form.get("end_date"))
+        if not start_date or not end_date:
+            flash("تاريخ بدء النشاط وتاريخ انتهائه إلزاميان لتسجيل النشاط.", "error")
+            return render_template("project_form.html", project=None, communities=communities, selected_community_slug=session.get("community_slug")), 400
+
+        if end_date < start_date:
+            flash("تاريخ انتهاء النشاط لا يمكن أن يكون قبل تاريخ البدء.", "error")
+            return render_template("project_form.html", project=None, communities=communities, selected_community_slug=session.get("community_slug")), 400
+
+        raw_status = request.form.get("status", "").strip()
+        if raw_status.lower() in ("canceled", "cancelled", "ملغي"):
+            status = "Canceled"
+        else:
+            today = datetime.utcnow().date()
+            if today < start_date:
+                status = "Planned"
+            elif today > end_date:
+                status = "Completed"
+            else:
+                status = "In Progress"
 
         username = session.get("username")
         if not username and current_app.config.get("MOCK_AUTH", False):
@@ -321,13 +400,15 @@ def create_project():
             description=safe_description,
             project_type=project_type,
             target_wiki=target_wiki,
+            start_date=start_date,
+            end_date=end_date,
             status=status,
-            start_date=start_date_val,
-            end_date=end_date_val,
             lead_organizer=username or "MoroccoVolunteer",
             co_organizers=co_organizers,
             is_contest=is_contest,
-            jury_members=jury_members
+            jury_members=jury_members,
+            participants=participants,
+            results=results
         )
         db.session.add(new_project)
         db.session.commit()
@@ -369,27 +450,30 @@ def edit_project(project_id):
         except ValueError as err:
             flash(str(err), "error")
             return render_template("project_form.html", project=project, communities=communities, selected_community_slug=project.community.slug if project.community else session.get("community_slug")), 400
-        raw_start = (request.form.get("start_date") or "").strip()
-        raw_end = (request.form.get("end_date") or "").strip()
-        if raw_start:
-            try:
-                project.start_date = datetime.strptime(raw_start, "%Y-%m-%d").date()
-            except ValueError:
-                pass
-        else:
-            project.start_date = None
+        start_date = _parse_date(request.form.get("start_date"))
+        end_date = _parse_date(request.form.get("end_date"))
+        if not start_date or not end_date:
+            flash("تاريخ بدء النشاط وتاريخ انتهائه إلزاميان.", "error")
+            return render_template("project_form.html", project=project, communities=communities, selected_community_slug=project.community.slug if project.community else session.get("community_slug")), 400
 
-        if raw_end:
-            try:
-                project.end_date = datetime.strptime(raw_end, "%Y-%m-%d").date()
-            except ValueError:
-                pass
-        else:
-            project.end_date = None
+        if end_date < start_date:
+            flash("تاريخ انتهاء النشاط لا يمكن أن يكون قبل تاريخ البدء.", "error")
+            return render_template("project_form.html", project=project, communities=communities, selected_community_slug=project.community.slug if project.community else session.get("community_slug")), 400
 
-        raw_status = (request.form.get("status") or "auto").strip()
-        from app.wiki_utils import determine_project_status
-        project.status = determine_project_status(project.start_date, project.end_date, raw_status)
+        project.start_date = start_date
+        project.end_date = end_date
+
+        raw_status = request.form.get("status", "").strip()
+        if raw_status.lower() in ("canceled", "cancelled", "ملغي"):
+            project.status = "Canceled"
+        else:
+            today = datetime.utcnow().date()
+            if today < start_date:
+                project.status = "Planned"
+            elif today > end_date:
+                project.status = "Completed"
+            else:
+                project.status = "In Progress"
         project.is_contest = bool(request.form.get("is_contest"))
 
         community_id = request.form.get("community_id")
@@ -404,6 +488,8 @@ def edit_project(project_id):
 
         jury_raw = request.form.get("jury_members", "")
         project.jury_members = [j.strip() for j in jury_raw.split(",") if j.strip()] if project.is_contest else []
+        project.participants = _parse_participants(request.form.get("participants", ""))
+        project.results = _parse_results(request.form)
 
         db.session.commit()
         flash("تم تحديث بيانات النشاط بنجاح!", "success")
@@ -431,6 +517,326 @@ def view_project(project_id):
         project=project,
         community=project.community,
         can_edit=can_edit
+    )
+
+
+def format_relative_time(dt):
+    """Formats a datetime into human-friendly relative Arabic time."""
+    if not dt:
+        return "غير متوفر"
+    diff = datetime.utcnow() - dt
+    seconds = int(diff.total_seconds())
+    if seconds < 60:
+        return "الآن"
+    minutes = seconds // 60
+    if minutes < 60:
+        return f"قبل {minutes} دقيقة"
+    hours = minutes // 60
+    if hours < 24:
+        return f"قبل {hours} ساعة"
+    days = hours // 24
+    if days == 1:
+        return "أمس"
+    if days < 30:
+        return f"قبل {days} يوماً"
+    months = days // 30
+    return f"قبل {months} شهراً"
+
+
+@web_bp.route("/user/<string:username>")
+def user_profile(username):
+    """
+    Global contributor profile view.
+    Zero-External-Network Invariant: Reads strictly from local relational storage.
+    If the username has no local record in User or Project, returns HTTP 404 immediately.
+    """
+    from app.query_utils import normalize_username
+    clean_username = normalize_username(username)
+    if not clean_username:
+        abort(404)
+
+    # 1. Local User lookup
+    user = User.query.filter(func.lower(User.username) == clean_username.lower()).first()
+
+    # 2. In-memory Python role filtering on candidate projects (cross-dialect safe)
+    candidate_projects = Project.query.order_by(Project.start_date.desc(), Project.created_at.desc()).all()
+    norm_lower = clean_username.lower()
+
+    lead_projects = []
+    co_projects = []
+    jury_projects = []
+    participant_projects = []
+
+    for p in candidate_projects:
+        is_lead = bool(p.lead_organizer and p.lead_organizer.strip().lower() == norm_lower)
+        is_co = any(co and co.strip().lower() == norm_lower for co in (p.co_organizers or []))
+        is_jury = any(j and j.strip().lower() == norm_lower for j in (p.jury_members or []))
+        is_part = any(part and part.strip().lower() == norm_lower for part in (p.participants or []))
+
+        if is_lead:
+            lead_projects.append(p)
+        if is_co:
+            co_projects.append(p)
+        if is_jury:
+            jury_projects.append(p)
+        if is_part:
+            participant_projects.append(p)
+
+    all_user_projects = list({p.id: p for p in (lead_projects + co_projects + jury_projects + participant_projects)}.values())
+
+    # If completely absent from both User and Project tables -> 404
+    if not user and not all_user_projects:
+        abort(404)
+
+    # If user is not yet in User table but participated in projects, construct display object
+    if not user:
+        user = User(
+            username=clean_username,
+            is_member=False,
+            first_seen=None,
+            last_synced=None
+        )
+
+    # 3. Metrics aggregation from StatSnapshot
+    snapshot = None
+    top_wikis = []
+    top_wikis_data = []
+    total_top_edits = 0
+    if user.id:
+        snapshot = StatSnapshot.query.filter_by(user_id=user.id).order_by(StatSnapshot.recorded_at.desc()).first()
+        if snapshot and snapshot.wiki_breakdown:
+            top_wikis = sorted(snapshot.wiki_breakdown.items(), key=lambda x: x[1], reverse=True)[:5]
+            total_top_edits = sum(count for _, count in top_wikis) or 1
+            max_count = top_wikis[0][1] if top_wikis else 1
+            min_count = top_wikis[-1][1] if top_wikis else 1
+            use_scaled = (max_count / max(min_count, 1)) > 50
+
+            palette = [
+                {"color": "#0ea5e9", "tint": "rgba(14, 165, 233, 0.12)", "border": "rgba(14, 165, 233, 0.3)"},
+                {"color": "#10b981", "tint": "rgba(16, 185, 129, 0.12)", "border": "rgba(16, 185, 129, 0.3)"},
+                {"color": "#f59e0b", "tint": "rgba(245, 158, 11, 0.12)", "border": "rgba(245, 158, 11, 0.3)"},
+                {"color": "#8b5cf6", "tint": "rgba(139, 92, 246, 0.12)", "border": "rgba(139, 92, 246, 0.3)"},
+                {"color": "#ec4899", "tint": "rgba(236, 72, 153, 0.12)", "border": "rgba(236, 72, 153, 0.3)"},
+            ]
+
+            for idx, (wiki, count) in enumerate(top_wikis):
+                c_info = palette[idx % len(palette)]
+                raw_pct = (count / total_top_edits) * 100
+                if raw_pct >= 1.0:
+                    pct_str = f"{raw_pct:.1f}%"
+                elif raw_pct >= 0.1:
+                    pct_str = f"{raw_pct:.1f}%"
+                elif raw_pct > 0:
+                    pct_str = "<0.1%"
+                else:
+                    pct_str = "0%"
+
+                ratio = count / max_count if max_count else 0
+                if use_scaled:
+                    bar_width = max(2.5, round((ratio ** 0.4) * 100, 1))
+                else:
+                    bar_width = max(3.0, round(ratio * 100, 1))
+
+                top_wikis_data.append({
+                    "rank": idx + 1,
+                    "wiki": wiki,
+                    "count": count,
+                    "pct": raw_pct,
+                    "pct_str": pct_str,
+                    "bar_width": bar_width,
+                    "color": c_info["color"],
+                    "tint": c_info["tint"],
+                    "border": c_info["border"],
+                })
+
+    sync_dt = snapshot.recorded_at if snapshot else user.last_synced
+    last_synced_relative = format_relative_time(sync_dt)
+
+    # 4. Multi-affiliate memberships
+    communities = [m.community for m in user.memberships if m.community] if user.id else []
+
+    organized_projects = list({p.id: p for p in (lead_projects + co_projects)}.values())
+
+    projects_by_role = {
+        "lead": lead_projects,
+        "co": co_projects,
+        "organized": organized_projects,
+        "jury": jury_projects,
+        "participant": participant_projects,
+        "all": all_user_projects
+    }
+
+    return render_template(
+        "user_profile.html",
+        user=user,
+        snapshot=snapshot,
+        top_wikis=top_wikis,
+        top_wikis_data=top_wikis_data,
+        total_top_edits=total_top_edits,
+        projects_by_role=projects_by_role,
+        total_user_projects=len(all_user_projects),
+        communities=communities,
+        last_synced_relative=last_synced_relative,
+        current_user=get_current_user()
+    )
+
+
+@web_bp.route("/project/<int:project_id>/report")
+def project_report(project_id):
+    """Printable Single-Project Dossier."""
+    project = Project.query.get_or_404(project_id)
+    auto_print = request.args.get("print") == "1"
+    return render_template(
+        "reports/project_report.html",
+        project=project,
+        community=project.community,
+        auto_print=auto_print,
+        generated_at=datetime.utcnow()
+    )
+
+
+@web_bp.route("/<slug>/report")
+def community_report(slug):
+    """Printable Affiliate Executive Report."""
+    if is_reserved_slug(slug):
+        abort(404)
+    community = Community.query.filter_by(slug=slug).first_or_404()
+
+    from app.query_utils import filter_projects_by_date, filter_projects_by_status
+    query = Project.query.filter_by(community_id=community.id)
+    query, start_date, end_date = filter_projects_by_date(query, request.args)
+    query = filter_projects_by_status(query, request.args)
+    projects = query.order_by(Project.start_date.desc(), Project.created_at.desc()).all()
+
+    total_projects = len(projects)
+    completed_projects = sum(1 for p in projects if p.status == "Completed")
+    contests_count = sum(1 for p in projects if p.is_contest)
+
+    members = CommunityMember.query.filter_by(community_id=community.id).all()
+    user_ids = [m.user_id for m in members]
+    total_edits = 0
+    if user_ids:
+        latest_snapshots = db.session.query(
+            StatSnapshot.user_id,
+            func.max(StatSnapshot.recorded_at).label("max_recorded")
+        ).filter(StatSnapshot.user_id.in_(user_ids)).group_by(StatSnapshot.user_id).subquery()
+
+        snaps = db.session.query(StatSnapshot).join(
+            latest_snapshots,
+            db.and_(
+                StatSnapshot.user_id == latest_snapshots.c.user_id,
+                StatSnapshot.recorded_at == latest_snapshots.c.max_recorded
+            )
+        ).all()
+        total_edits = sum(s.total_edits for s in snaps)
+
+    filter_label = "تقرير شامل"
+    if start_date and end_date:
+        filter_label = f"الفترة من {start_date.strftime('%Y-%m-%d')} إلى {end_date.strftime('%Y-%m-%d')}"
+    elif request.args.get("year"):
+        filter_label = f"سنة {request.args.get('year')}"
+    elif request.args.get("month"):
+        filter_label = f"شهر {request.args.get('month')}"
+
+    stats = {
+        "total_projects": total_projects,
+        "completed_projects": completed_projects,
+        "contests_count": contests_count,
+        "total_members": len(members),
+        "total_edits": total_edits
+    }
+
+    auto_print = request.args.get("print") == "1"
+    detailed = request.args.get("detailed") in ("1", "true", "yes")
+    return render_template(
+        "reports/community_report.html",
+        community=community,
+        projects=projects,
+        stats=stats,
+        filter_label=filter_label,
+        auto_print=auto_print,
+        detailed=detailed,
+        generated_at=datetime.utcnow()
+    )
+
+
+@web_bp.route("/user/<string:username>/report")
+def user_report(username):
+    """Printable Contributor Portfolio Report."""
+    from app.query_utils import normalize_username, filter_projects_by_status
+    clean_username = normalize_username(username)
+    if not clean_username:
+        abort(404)
+
+    user = User.query.filter(func.lower(User.username) == clean_username.lower()).first()
+
+    query = Project.query
+    query = filter_projects_by_status(query, request.args)
+    candidate_projects = query.order_by(Project.start_date.desc(), Project.created_at.desc()).all()
+    norm_lower = clean_username.lower()
+
+    lead_projects = []
+    co_projects = []
+    jury_projects = []
+    participant_projects = []
+
+    for p in candidate_projects:
+        is_lead = bool(p.lead_organizer and p.lead_organizer.strip().lower() == norm_lower)
+        is_co = any(co and co.strip().lower() == norm_lower for co in (p.co_organizers or []))
+        is_jury = any(j and j.strip().lower() == norm_lower for j in (p.jury_members or []))
+        is_part = any(part and part.strip().lower() == norm_lower for part in (p.participants or []))
+
+        if is_lead:
+            lead_projects.append(p)
+        if is_co:
+            co_projects.append(p)
+        if is_jury:
+            jury_projects.append(p)
+        if is_part:
+            participant_projects.append(p)
+
+    all_user_projects = list({p.id: p for p in (lead_projects + co_projects + jury_projects + participant_projects)}.values())
+
+    if not user and not all_user_projects:
+        abort(404)
+
+    if not user:
+        user = User(
+            username=clean_username,
+            is_member=False,
+            first_seen=None,
+            last_synced=None
+        )
+
+    snapshot = None
+    top_wikis = []
+    if user.id:
+        snapshot = StatSnapshot.query.filter_by(user_id=user.id).order_by(StatSnapshot.recorded_at.desc()).first()
+        if snapshot and snapshot.wiki_breakdown:
+            top_wikis = sorted(snapshot.wiki_breakdown.items(), key=lambda x: x[1], reverse=True)[:5]
+
+    organized_projects = list({p.id: p for p in (lead_projects + co_projects)}.values())
+
+    projects_by_role = {
+        "lead": lead_projects,
+        "co": co_projects,
+        "organized": organized_projects,
+        "jury": jury_projects,
+        "participant": participant_projects,
+        "all": all_user_projects
+    }
+
+    auto_print = request.args.get("print") == "1"
+    detailed = request.args.get("detailed") in ("1", "true", "yes")
+    return render_template(
+        "reports/user_report.html",
+        user=user,
+        snapshot=snapshot,
+        top_wikis=top_wikis,
+        projects_by_role=projects_by_role,
+        auto_print=auto_print,
+        detailed=detailed,
+        generated_at=datetime.utcnow()
     )
 
 

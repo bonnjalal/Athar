@@ -124,7 +124,36 @@
 
             </div>
 
-            <!-- Step 4: Live Preview & Matched Projects -->
+            <!-- Step 4: Status Inclusion Options -->
+            <div class="form-group" style="margin-bottom: 1.5rem;">
+                <label class="cdx-label" style="font-weight: 700; margin-bottom: 0.6rem; display: block;">
+                    3. حالات الأنشطة المضمنة في التقرير:
+                </label>
+                <div style="background: #f8f9fa; border: 1px solid #c8ccd1; border-radius: 8px; padding: 1rem 1.25rem;">
+                    <div style="font-size: 0.88rem; color: #1e4620; font-weight: 600; margin-bottom: 0.75rem; display: flex; align-items: center; gap: 6px;">
+                        <span>✅</span> الأنشطة المكتملة (Completed) مضمنة أساسياً في التقرير
+                    </div>
+                    <div style="display: flex; gap: 1.5rem; flex-wrap: wrap;">
+                        <label style="display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-size: 0.92rem; font-weight: 500;">
+                            <input type="checkbox" id="include-in-progress" name="include_in_progress" value="1" onchange="updateLivePreview()" style="width: 18px; height: 18px; cursor: pointer;">
+                            <span>تضمين الأنشطة الجارية (In Progress)</span>
+                        </label>
+                        <label style="display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-size: 0.92rem; font-weight: 500;">
+                            <input type="checkbox" id="include-planned" name="include_planned" value="1" onchange="updateLivePreview()" style="width: 18px; height: 18px; cursor: pointer;">
+                            <span>تضمين الأنشطة المخطط لها (Planned)</span>
+                        </label>
+                        <label style="display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-size: 0.92rem; font-weight: 500;">
+                            <input type="checkbox" id="include-canceled" name="include_canceled" value="1" onchange="updateLivePreview()" style="width: 18px; height: 18px; cursor: pointer;">
+                            <span>تضمين الأنشطة الملغاة (Canceled)</span>
+                        </label>
+                    </div>
+                    <div style="font-size: 0.8rem; color: #54595d; margin-top: 0.6rem;">
+                        إذا لم يُفعَّل أي خيار إضافي، فسيقتصر التقرير على الأنشطة المكتملة فقط.
+                    </div>
+                </div>
+            </div>
+
+            <!-- Step 5: Live Preview & Matched Projects -->
             <div class="export-preview-card">
                 <div class="export-preview-header">
                     <div>
@@ -161,10 +190,16 @@
             <div class="export-actions-row">
                 <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
                     <button type="submit" id="btn-export-csv" class="cdx-button cdx-button--action cdx-button--weight-primary" style="padding: 0 24px; font-size: 1rem;">
-                        تحميل التقرير بصيغة CSV
+                        📥 تحميل التقرير بصيغة CSV
                     </button>
+                    <a id="btn-print-report" href="#" target="_blank" rel="noopener" class="cdx-button" style="padding: 0 16px; font-size: 0.95rem;">
+                        📄 تقرير ملخص (طباعة / PDF)
+                    </a>
+                    <a id="btn-print-detailed-report" href="#" target="_blank" rel="noopener" class="cdx-button cdx-button--action" style="padding: 0 16px; font-size: 0.95rem;">
+                        📑 تقرير مفصل للأنشطة (طباعة / PDF)
+                    </a>
                     <a id="btn-direct-link" href="#" class="cdx-button cdx-button--quiet" style="font-size: 0.9rem;" target="_blank" rel="noopener">
-                        رابط التحميل المباشر
+                        رابط CSV المباشر
                     </a>
                 </div>
 

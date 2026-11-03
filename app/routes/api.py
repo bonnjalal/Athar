@@ -1,14 +1,16 @@
 import csv
 import io
+import re
 import calendar
 from datetime import datetime, date
-from flask import Blueprint, jsonify, request, Response, session
+from flask import Blueprint, jsonify, request, Response, session, stream_with_context
 from app.models import Community, Project, User, StatSnapshot, CommunityMember
 from app.oauth import member_required, project_editor_required, get_current_user
 from app import db
 from sqlalchemy import func
 import bleach
 from app.wiki_utils import normalize_wiki_target
+from app.query_utils import filter_projects_by_date, filter_projects_by_status, sanitize_csv_cell, normalize_username
 
 api_bp = Blueprint("api", __name__)
 
@@ -270,6 +272,7 @@ def list_slug_project(slug):
             query = query.filter_by(target_wiki=target_wiki)
 
     query, _, _ = _filter_projects_by_date(query, request.args)
+    query = filter_projects_by_status(query, request.args)
 
     projects = query.order_by(Project.created_at.desc()).all()
     return jsonify([p.to_dict() for p in projects]), 200
@@ -329,6 +332,18 @@ def create_projetct(slug):
     else:
         jury_members = []
 
+    participants_raw = data.get("participants", [])
+    if isinstance(participants_raw, str):
+        participants = [p.strip() for p in re.split(r'[\r\n,]+', participants_raw) if p.strip()]
+    elif isinstance(participants_raw, list):
+        participants = [str(p).strip() for p in participants_raw if str(p).strip()]
+    else:
+        participants = []
+
+    results = data.get("results")
+    if results and not isinstance(results, dict):
+        results = None
+
     # Current user identification (handles OAuth session and MOCK_AUTH)
     curr_user = get_current_user()
     if curr_user and isinstance(curr_user, dict):
@@ -367,7 +382,9 @@ def create_projetct(slug):
         lead_organizer=lead_user,
         co_organizers=co_organizers,
         is_contest=is_contest,
-        jury_members=jury_members
+        jury_members=jury_members,
+        participants=participants,
+        results=results
     )
     db.session.add(new_project)
     db.session.commit()
@@ -476,14 +493,172 @@ def update_project(project_id, slug=None):
         from app.wiki_utils import determine_project_status
         project.status = determine_project_status(project.start_date, project.end_date, "auto")
 
+    if "participants" in data:
+        p_raw = data["participants"]
+        if isinstance(p_raw, str):
+            project.participants = [p.strip() for p in re.split(r'[\r\n,]+', p_raw) if p.strip()]
+        elif isinstance(p_raw, list):
+            project.participants = [str(p).strip() for p in p_raw if str(p).strip()]
+        elif p_raw is None:
+            project.participants = None
+
+    if "results" in data:
+        r_val = data["results"]
+        project.results = r_val if isinstance(r_val, dict) else None
+
     db.session.commit()
     return jsonify({
         "message": "Project updated successfully",
         "project": project.to_dict()
     }), 200
 
+
+@api_bp.route("/projects/<int:project_id>/export", methods=["GET"])
+def export_project_csv(project_id):
+    """
+    Level 1 CSV Export: Streams participant and organizer roster for a single project.
+    Headers: ["اسم المستخدم", "الدور في النشاط", "عنوان النشاط", "المشروع المستهدف", "تاريخ البدء", "تاريخ الانتهاء"]
+    """
+    project = db.session.get(Project, project_id)
+    if not project:
+        return jsonify({"error": "Project not found"}), 404
+
+    export_format = request.args.get("format", "csv").lower()
+    if export_format != "csv":
+        return jsonify({"error": f"Unsupported format '{export_format}'. Only 'csv' is supported."}), 400
+
+    # Eagerly extract roster rows before streaming
+    rows = []
+    if project.lead_organizer:
+        rows.append((project.lead_organizer, "منظم رئيسي"))
+    for co in (project.co_organizers or []):
+        if co:
+            rows.append((co, "منظم مشارك"))
+    if project.is_contest:
+        for j in (project.jury_members or []):
+            if j:
+                rows.append((j, "لجنة تحكيم"))
+    for part in (project.participants or []):
+        if part:
+            rows.append((part, "مشارك"))
+
+    title = project.title
+    target_wiki = project.target_wiki
+    start_str = project.start_date.strftime("%Y-%m-%d") if project.start_date else ""
+    end_str = project.end_date.strftime("%Y-%m-%d") if project.end_date else ""
+    proj_id = project.id
+
+    def generate_csv():
+        output = io.StringIO()
+        writer = csv.writer(output)
+        # Yield UTF-8 BOM so Excel opens Arabic text cleanly
+        yield '\ufeff'
+
+        headers = ["اسم المستخدم", "الدور في النشاط", "عنوان النشاط", "المشروع المستهدف", "تاريخ البدء", "تاريخ الانتهاء"]
+        writer.writerow(headers)
+        yield output.getvalue()
+        output.seek(0)
+        output.truncate(0)
+
+        for username, role in rows:
+            clean_row = [
+                sanitize_csv_cell(username),
+                sanitize_csv_cell(role),
+                sanitize_csv_cell(title),
+                sanitize_csv_cell(target_wiki),
+                sanitize_csv_cell(start_str),
+                sanitize_csv_cell(end_str)
+            ]
+            writer.writerow(clean_row)
+            yield output.getvalue()
+            output.seek(0)
+            output.truncate(0)
+
+    filename = f"athar_project_{proj_id}_roster.csv"
+    return Response(
+        stream_with_context(generate_csv()),
+        mimetype="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
+
+@api_bp.route("/users/<string:username>/export", methods=["GET"])
+@api_bp.route("/user/<string:username>/export", methods=["GET"])
+def export_user_projects_csv(username):
+    """
+    Level 3 CSV Export: Streams contributor activity history across all projects.
+    Headers: ["معرف النشاط", "عنوان النشاط", "المجتمع التابع له", "الدور", "الحالة", "المشروع المستهدف", "تاريخ البدء", "تاريخ الانتهاء"]
+    """
+    clean_username = normalize_username(username)
+    if not clean_username:
+        return jsonify({"error": "Username is required"}), 400
+
+    export_format = request.args.get("format", "csv").lower()
+    if export_format != "csv":
+        return jsonify({"error": f"Unsupported format '{export_format}'. Only 'csv' is supported."}), 400
+
+    norm_lower = clean_username.lower()
+    query = Project.query
+    query = filter_projects_by_status(query, request.args)
+    candidate_projects = query.order_by(Project.start_date.desc(), Project.created_at.desc()).all()
+
+    # Eagerly extract records to prevent DetachedInstanceError during streaming
+    user_rows = []
+    for p in candidate_projects:
+        role = None
+        if (p.lead_organizer and p.lead_organizer.strip().lower() == norm_lower) or \
+           any(co and co.strip().lower() == norm_lower for co in (p.co_organizers or [])):
+            role = "منظم"
+        elif any(j and j.strip().lower() == norm_lower for j in (p.jury_members or [])):
+            role = "لجنة تحكيم"
+        elif any(part and part.strip().lower() == norm_lower for part in (p.participants or [])):
+            role = "مشارك"
+
+        if role:
+            comm_name = p.community.name if p.community else "عام"
+            start_str = p.start_date.strftime("%Y-%m-%d") if p.start_date else ""
+            end_str = p.end_date.strftime("%Y-%m-%d") if p.end_date else ""
+            user_rows.append([
+                sanitize_csv_cell(p.id),
+                sanitize_csv_cell(p.title),
+                sanitize_csv_cell(comm_name),
+                sanitize_csv_cell(role),
+                sanitize_csv_cell(p.status),
+                sanitize_csv_cell(p.target_wiki),
+                sanitize_csv_cell(start_str),
+                sanitize_csv_cell(end_str)
+            ])
+
+    def generate_csv():
+        output = io.StringIO()
+        writer = csv.writer(output)
+        yield '\ufeff'
+
+        headers = ["معرف النشاط", "عنوان النشاط", "المجتمع التابع له", "الدور", "الحالة", "المشروع المستهدف", "تاريخ البدء", "تاريخ الانتهاء"]
+        writer.writerow(headers)
+        yield output.getvalue()
+        output.seek(0)
+        output.truncate(0)
+
+        for row in user_rows:
+            writer.writerow(row)
+            yield output.getvalue()
+            output.seek(0)
+            output.truncate(0)
+
+    filename = f"athar_user_{clean_username.replace(' ', '_')}_projects.csv"
+    return Response(
+        stream_with_context(generate_csv()),
+        mimetype="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
+
 @api_bp.route("/<string:slug>/export", methods=["GET"])
 def exp_community_projects(slug):
+    """
+    Level 2 CSV Export: Streams filtered community projects with formula injection protection.
+    """
     community = Community.query.filter_by(slug=slug).first()
     if not community:
         return jsonify({"error": "Community not found"}), 404
@@ -504,46 +679,57 @@ def exp_community_projects(slug):
     if target_wiki:
         query = query.filter_by(target_wiki=target_wiki)
 
-    query, start_date, end_date = _filter_projects_by_date(query, request.args)
-
+    query, start_date, end_date = filter_projects_by_date(query, request.args)
+    query = filter_projects_by_status(query, request.args)
     projects = query.order_by(Project.created_at.desc()).all()
-    
-    output = io.StringIO()
-    # Write UTF-8 BOM so Excel opens Arabic text without corruption
-    output.write('\ufeff')
-    writer = csv.writer(output)
 
-    writer.writerow([
-        "المعرف",
-        "عنوان النشاط",
-        "نوع النشاط",
-        "المشروع المستهدف",
-        "رابط المشروع",
-        "الحالة",
-        "المنظم الرئيسي",
-        "المنظمون المشاركون",
-        "مسابقة",
-        "لجنة التحكيم",
-        "تاريخ البدء",
-        "تاريخ الانتهاء",
-        "تاريخ التسجيل"
-    ])
+    # Eagerly extract records to prevent DetachedInstanceError during streaming
+    project_rows = []
     for p in projects:
-        writer.writerow([
-            p.id,
-            p.title,
-            p.project_type,
-            p.target_wiki,
-            p.target_wiki_url,
-            p.status,
-            p.lead_organizer,
-            ", ".join(p.co_organizers or []),
-            "نعم" if p.is_contest else "لا",
-            ", ".join(p.jury_members or []),
-            p.start_date.strftime("%Y-%m-%d") if p.start_date else "",
-            p.end_date.strftime("%Y-%m-%d") if p.end_date else "",
-            p.created_at.strftime("%Y-%m-%d") if p.created_at else ""
+        project_rows.append([
+            sanitize_csv_cell(p.id),
+            sanitize_csv_cell(p.title),
+            sanitize_csv_cell(p.project_type),
+            sanitize_csv_cell(p.target_wiki),
+            sanitize_csv_cell(p.target_wiki_url),
+            sanitize_csv_cell(p.status),
+            sanitize_csv_cell(", ".join(p.all_organizers)),
+            sanitize_csv_cell("نعم" if p.is_contest else "لا"),
+            sanitize_csv_cell(", ".join(p.jury_members or [])),
+            sanitize_csv_cell(p.start_date.strftime("%Y-%m-%d") if p.start_date else ""),
+            sanitize_csv_cell(p.end_date.strftime("%Y-%m-%d") if p.end_date else ""),
+            sanitize_csv_cell(p.created_at.strftime("%Y-%m-%d") if p.created_at else "")
         ])
+
+    def generate_csv():
+        output = io.StringIO()
+        writer = csv.writer(output)
+        yield '\ufeff'
+
+        headers = [
+            "المعرف",
+            "عنوان النشاط",
+            "نوع النشاط",
+            "المشروع المستهدف",
+            "رابط المشروع",
+            "الحالة",
+            "المنظمون",
+            "مسابقة",
+            "لجنة التحكيم",
+            "تاريخ البدء",
+            "تاريخ الانتهاء",
+            "تاريخ التسجيل"
+        ]
+        writer.writerow(headers)
+        yield output.getvalue()
+        output.seek(0)
+        output.truncate(0)
+
+        for row in project_rows:
+            writer.writerow(row)
+            yield output.getvalue()
+            output.seek(0)
+            output.truncate(0)
 
     filename = f"athar_{community.slug}_projects.csv"
     if request.args.get("year") and not request.args.get("month"):
@@ -554,11 +740,10 @@ def exp_community_projects(slug):
     elif request.args.get("start_date") or request.args.get("from_date"):
         filename = f"athar_{community.slug}_projects_custom.csv"
 
-    output.seek(0)
     return Response(
-        output.getvalue(),
+        stream_with_context(generate_csv()),
         mimetype="text/csv; charset=utf-8",
-        headers={"Content-Disposition": f"attachment;filename={filename}"}
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
     )
 
 

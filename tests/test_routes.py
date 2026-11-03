@@ -49,6 +49,8 @@ class TestRoutesAndSecurity(unittest.TestCase):
             "description": "Created from web interface",
             "project_type": "Workshop",
             "target_wiki": "ar.wikipedia.org",
+            "start_date": "2026-01-01",
+            "end_date": "2026-01-30",
             "status": "In Progress"
         }, follow_redirects=True)
         self.assertEqual(response.status_code, 200)
@@ -68,6 +70,8 @@ class TestRoutesAndSecurity(unittest.TestCase):
             "description": "Annual photo competition with jury",
             "project_type": "Contest",
             "target_wiki": "commons",
+            "start_date": "2026-02-01",
+            "end_date": "2026-02-28",
             "status": "In Progress",
             "co_organizers": "Houssain tork,Taloubant",
             "is_contest": "1",
@@ -158,6 +162,8 @@ class TestRoutesAndSecurity(unittest.TestCase):
             "project_type": "Other",
             "custom_project_type": "ندوة فكرية وثقافية",
             "target_wiki": "ar.wikipedia.org",
+            "start_date": "2026-03-01",
+            "end_date": "2026-03-15",
             "status": "In Progress"
         }, follow_redirects=True)
         self.assertEqual(response.status_code, 200)
@@ -168,12 +174,15 @@ class TestRoutesAndSecurity(unittest.TestCase):
             self.assertEqual(p.project_type, "ندوة فكرية وثقافية")
 
     def test_edit_project_web_custom_type(self):
+        from datetime import date
         with self.app.app_context():
             p = Project(
                 title="Existing Workshop",
                 description="Testing edit",
                 project_type="Workshop",
                 target_wiki="ar.wikipedia.org",
+                start_date=date(2026, 1, 1),
+                end_date=date(2026, 1, 15),
                 status="In Progress",
                 lead_organizer="MoroccoVolunteer"
             )
@@ -191,6 +200,8 @@ class TestRoutesAndSecurity(unittest.TestCase):
             "project_type": "Other",
             "custom_project_type": "بودكاست مجتمعي",
             "target_wiki": "ar.wikipedia.org",
+            "start_date": "2026-03-01",
+            "end_date": "2026-03-15",
             "status": "In Progress"
         }, follow_redirects=True)
         self.assertEqual(response.status_code, 200)
@@ -198,6 +209,68 @@ class TestRoutesAndSecurity(unittest.TestCase):
         with self.app.app_context():
             updated = db.session.get(Project, p_id)
             self.assertEqual(updated.project_type, "بودكاست مجتمعي")
+
+    def test_create_and_edit_project_dates_and_status(self):
+        from datetime import date
+        with self.client.session_transaction() as sess:
+            sess["username"] = "OrganizerUser"
+            sess["is_member"] = True
+
+        # Test creating future project -> auto status is Planned
+        response = self.client.post("/project/new", data={
+            "title": "Future Planned Activity",
+            "description": "Testing future dates",
+            "project_type": "Workshop",
+            "target_wiki": "ar.wikipedia.org",
+            "start_date": "2027-05-10",
+            "end_date": "2027-05-15",
+            "status": "In Progress"  # will be auto-calculated to Planned
+        }, follow_redirects=True)
+        self.assertEqual(response.status_code, 200)
+
+        with self.app.app_context():
+            p = Project.query.filter_by(title="Future Planned Activity").first()
+            self.assertIsNotNone(p)
+            self.assertEqual(p.start_date, date(2027, 5, 10))
+            self.assertEqual(p.end_date, date(2027, 5, 15))
+            self.assertEqual(p.status, "Planned")
+            p_id = p.id
+
+        # Test setting status to Canceled overrides dates
+        response = self.client.post(f"/project/{p_id}/edit", data={
+            "title": "Canceled Activity",
+            "description": "Activity was canceled",
+            "project_type": "Workshop",
+            "target_wiki": "ar.wikipedia.org",
+            "start_date": "2027-05-10",
+            "end_date": "2027-05-15",
+            "status": "Canceled"
+        }, follow_redirects=True)
+        self.assertEqual(response.status_code, 200)
+
+        with self.app.app_context():
+            updated = db.session.get(Project, p_id)
+            self.assertEqual(updated.status, "Canceled")
+
+        # Test missing dates fails with 400
+        res_missing = self.client.post("/project/new", data={
+            "title": "Missing Dates Activity",
+            "description": "No dates",
+            "project_type": "Workshop",
+            "target_wiki": "ar.wikipedia.org"
+        }, follow_redirects=True)
+        self.assertEqual(res_missing.status_code, 400)
+
+        # Test invalid date sequence (end < start) fails with 400
+        res_invalid_seq = self.client.post("/project/new", data={
+            "title": "Inverted Dates Activity",
+            "description": "Invalid dates",
+            "project_type": "Workshop",
+            "target_wiki": "ar.wikipedia.org",
+            "start_date": "2027-05-20",
+            "end_date": "2027-05-10"
+        }, follow_redirects=True)
+        self.assertEqual(res_invalid_seq.status_code, 400)
 
     def test_view_project_web(self):
         with self.app.app_context():
@@ -229,6 +302,8 @@ class TestRoutesAndSecurity(unittest.TestCase):
             "description": "Photo contest on commons",
             "project_type": "Contest",
             "target_wiki": "commons",
+            "start_date": "2026-04-01",
+            "end_date": "2026-04-10",
             "status": "In Progress"
         }, follow_redirects=True)
         self.assertEqual(res_ok.status_code, 200)
@@ -245,6 +320,8 @@ class TestRoutesAndSecurity(unittest.TestCase):
             "description": "SSRF / Open Redirect attempt",
             "project_type": "Workshop",
             "target_wiki": "evil.com",
+            "start_date": "2026-04-01",
+            "end_date": "2026-04-10",
             "status": "In Progress"
         }, follow_redirects=True)
         self.assertEqual(res_bad.status_code, 400)

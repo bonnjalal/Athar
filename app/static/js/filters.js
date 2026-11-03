@@ -145,18 +145,26 @@ document.addEventListener("DOMContentLoaded", () => {
         targetWikiEl.innerHTML = `<a href="${escapeHtml(wikiUrl)}" target="_blank" rel="noopener" style="color: #36c; text-decoration: underline;">${escapeHtml(wikiLabel)} (${escapeHtml(wikiUrl)})</a>`;
     }
 
-        if (leadEl) {
-            leadEl.textContent = project.lead_organizer || "غير محدد";
+        const orgs = [];
+        if (Array.isArray(project.all_organizers) && project.all_organizers.length > 0) {
+            orgs.push(...project.all_organizers);
+        } else {
+            if (project.lead_organizer && String(project.lead_organizer).trim()) {
+                orgs.push(String(project.lead_organizer).trim());
+            }
+            const coOrgs = Array.isArray(project.co_organizers) ? project.co_organizers : (project.co_organizers ? [project.co_organizers] : []);
+            coOrgs.forEach(co => {
+                if (co && typeof co === 'string' && co.trim() && !orgs.includes(co.trim())) {
+                    orgs.push(co.trim());
+                }
+            });
         }
 
-        const coOrgs = Array.isArray(project.co_organizers) ? project.co_organizers : (project.co_organizers ? [project.co_organizers] : []);
-        if (coOrgsItem && coOrgsEl) {
-            if (coOrgs.length > 0) {
-                coOrgsItem.style.display = "flex";
-                coOrgsEl.textContent = coOrgs.join("، ");
-            } else {
-                coOrgsItem.style.display = "none";
-            }
+        if (leadEl) {
+            leadEl.textContent = orgs.length > 0 ? orgs.join("، ") : "غير محدد";
+        }
+        if (coOrgsItem) {
+            coOrgsItem.style.display = "none";
         }
 
         const dates = [];

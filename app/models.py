@@ -78,6 +78,9 @@ class CommunityMember(db.Model):
 
 class StatSnapshot(db.Model):
     __tablename__ = "stat_snapshots"
+    __table_args__ = (
+        db.Index("ix_stat_snapshots_user_recorded", "user_id", db.text("recorded_at DESC")),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
@@ -107,10 +110,12 @@ class Project(db.Model):
     status = db.Column(db.String(32), default="In Progress", nullable=False)  # Planned, In Progress, Completed
 
     # Ownership & Roles
-    lead_organizer = db.Column(db.String(128), nullable=False)
+    lead_organizer = db.Column(db.String(128), nullable=False, index=True)
     co_organizers = db.Column(db.JSON, nullable=True)  # ["UserA", "UserB"]
     is_contest = db.Column(db.Boolean, default=False, nullable=False)
     jury_members = db.Column(db.JSON, nullable=True)   # ["Jury1", "Jury2"]
+    participants = db.Column(db.JSON, nullable=True)   # ["User1", "User2"]
+    results = db.Column(db.JSON, nullable=True)        # {"summary": str, "winners": List[str], "metrics": dict, "notes": str}
 
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -141,6 +146,15 @@ class Project(db.Model):
         if new_status != self.status:
             self.status = new_status
         return self.status
+    @property
+    def all_organizers(self):
+        orgs = []
+        if self.lead_organizer and self.lead_organizer.strip():
+            orgs.append(self.lead_organizer.strip())
+        for co in (self.co_organizers or []):
+            if co and isinstance(co, str) and co.strip() and co.strip() not in orgs:
+                orgs.append(co.strip())
+        return orgs
 
     def to_dict(self):
         return {
@@ -156,7 +170,10 @@ class Project(db.Model):
             "status": self.status,
             "lead_organizer": self.lead_organizer,
             "co_organizers": self.co_organizers or [],
+            "all_organizers": self.all_organizers,
             "is_contest": self.is_contest,
             "jury_members": self.jury_members or [],
+            "participants": self.participants or [],
+            "results": self.results or {},
             "created_at": self.created_at.isoformat() if self.created_at else None
         }

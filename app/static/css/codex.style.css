@@ -501,6 +501,13 @@ body {
     border-color: #e2e8f0;
 }
 
+.project-status--canceled,
+.project-status--cancelled {
+    background: #fef2f2;
+    color: #b91c1c;
+    border-color: #fecaca;
+}
+
 .project-type-badge {
     display: inline-flex;
     align-items: center;
