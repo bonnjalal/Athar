@@ -1,6 +1,6 @@
 # Toolforge Scheduled Kubernetes Job for automated metrics ingestion
 - name: stats-sync
-  command: python3 scripts/sync_data.py
+  command: "sh -c 'cd $HOME/app-src && $HOME/www/python/venv/bin/python3 scripts/sync_data.py'"
   image: python3.11
   schedule: "0 */4 * * *"
   emails: none
