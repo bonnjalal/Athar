@@ -20,6 +20,7 @@ DEFAULT_USER_AGENT = "Athar/1.0 (https://athar.toolforge.org; bonnjalal@gmail.co
 USER_TEMPLATE_NAMES = {
     "user", "user2", "user3", "u", "userlink", "user-link", "مستخدم"
 }
+USER_PARAM_NAMES = ("user", "username", "مستخدم", "اسم_المستخدم")
 USER_PREFIXES = ("user:", "user_talk:", "مستخدم:", "نقاش_المستخدم:")
 
 def normalize_meta_page_title(page_or_url):
@@ -80,14 +81,26 @@ def extract_members_from_wikitext(raw_wikitext):
             seen.add(cleaned.lower())
             members.append(cleaned)
 
-    # 1. Extract from user templates
+    # 1. Extract from user templates and card/member templates (e.g. {{user|...}}, {{.../member card|user=...}})
     for template in wikicode.filter_templates():
         tname = str(template.name).strip().lower()
         if tname in USER_TEMPLATE_NAMES:
             if template.has(1):
                 clean_and_add(template.get(1).value)
-            elif template.params:
-                clean_and_add(template.params[0].value)
+            else:
+                matched = False
+                for param in template.params:
+                    if str(param.name).strip().lower() in USER_PARAM_NAMES:
+                        clean_and_add(param.value)
+                        matched = True
+                        break
+                if not matched and template.params:
+                    clean_and_add(template.params[0].value)
+        else:
+            for param in template.params:
+                if str(param.name).strip().lower() in USER_PARAM_NAMES:
+                    clean_and_add(param.value)
+                    break
 
     # 2. Extract from direct wikilinks
     for link in wikicode.filter_wikilinks():
@@ -104,6 +117,7 @@ def fetch_members_from_meta(page_title=None, user_agent=None):
     Fetch wikitext from Meta-Wiki API for a given page title or full URL and extract member usernames.
     Supports both raw page titles ('Wikimedia_MA_User_Group/Members') and full URLs
     ('https://meta.wikimedia.org/wiki/Wikimedia_MA_User_Group/Members').
+    Falls back to parsed MediaWiki User namespace (ns=2) links if no raw templates/wikilinks matched.
     Guarantees that network errors, timeouts, or invalid pages return [] without crashing.
     """
     if not page_title:
@@ -118,7 +132,7 @@ def fetch_members_from_meta(page_title=None, user_agent=None):
     params = {
         "action": "parse",
         "page": page_title,
-        "prop": "wikitext",
+        "prop": "wikitext|links",
         "format": "json"
     }
     headers = {"User-Agent": ua}
@@ -129,7 +143,8 @@ def fetch_members_from_meta(page_title=None, user_agent=None):
             print(f"[Warning] HTTP {resp.status_code} when fetching Meta page '{page_title}'")
             return []
         data = resp.json()
-        raw_wikitext = data.get("parse", {}).get("wikitext", {}).get("*", "")
+        parse_obj = data.get("parse", {})
+        raw_wikitext = parse_obj.get("wikitext", {}).get("*", "")
     except requests.RequestException as e:
         print(f"[Error] Network error fetching Meta page '{page_title}': {e}")
         return []
@@ -137,7 +152,22 @@ def fetch_members_from_meta(page_title=None, user_agent=None):
         print(f"[Error] Failed to parse response for Meta page '{page_title}': {e}")
         return []
 
-    return extract_members_from_wikitext(raw_wikitext)
+    members = extract_members_from_wikitext(raw_wikitext)
+    if not members:
+        seen = set()
+        for link in parse_obj.get("links", []):
+            if link.get("ns") == 2 and link.get("*"):
+                cleaned = str(link["*"]).strip()
+                for prefix in USER_PREFIXES:
+                    if cleaned.lower().startswith(prefix):
+                        cleaned = cleaned[len(prefix):].strip()
+                        break
+                cleaned = cleaned.split("/")[0].replace("_", " ").strip()
+                if cleaned and cleaned.lower() not in seen:
+                    seen.add(cleaned.lower())
+                    members.append(cleaned)
+
+    return members
 
 if __name__ == "__main__":
     page = sys.argv[1] if len(sys.argv) > 1 else None

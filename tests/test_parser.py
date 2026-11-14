@@ -1,7 +1,7 @@
 import sys
 import os
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 import requests
 
 # Ensure project root is in sys.path when running script directly
@@ -88,6 +88,35 @@ class TestWikitextParser(unittest.TestCase):
         mock_get.side_effect = requests.RequestException("Connection timeout")
         result = fetch_members_from_meta("https://meta.wikimedia.org/wiki/Faulty_Page_Title")
         self.assertEqual(result, [])
+
+    def test_named_user_param_custom_template(self):
+        sample = """
+        {{Wikimedia MA User Group/member card|user=DERDAKI ILIAS|name=DERDAKI ILIAS|initial=D|image=Example.jpg}}
+        {{Custom Member Card|username=SecondMember|role=Organizer}}
+        {{Another Card|مستخدم=ThirdMember}}
+        """
+        members = extract_members_from_wikitext(sample)
+        self.assertEqual(members, ["DERDAKI ILIAS", "SecondMember", "ThirdMember"])
+
+    @patch("requests.get")
+    def test_fetch_falls_back_to_parsed_user_links(self, mock_get):
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "parse": {
+                "wikitext": {"*": "{{SomeModuleInvokingLua|id=1}}"},
+                "links": [
+                    {"ns": 0, "*": "Main Page"},
+                    {"ns": 2, "*": "User:AlphaUser"},
+                    {"ns": 2, "*": "User:AlphaUser/sandbox"},
+                    {"ns": 2, "*": "User:BetaUser"},
+                ],
+            }
+        }
+        mock_get.return_value = mock_response
+
+        result = fetch_members_from_meta("Wikimedia_MA_User_Group/Members")
+        self.assertEqual(result, ["AlphaUser", "BetaUser"])
 
 if __name__ == "__main__":
     unittest.main()

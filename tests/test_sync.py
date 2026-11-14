@@ -194,8 +194,115 @@ class TestSyncData(unittest.TestCase):
             synced = sync_community(comm)
             self.assertEqual(synced, 1)
 
-            # mock_stats should NOT have been called because user was synced < 4 hours ago
+            # mock_stats should NOT have been called because user was synced < 3 hours ago
             mock_stats.assert_not_called()
+
+    @patch("scripts.sync_data.fetch_members_from_meta")
+    @patch("scripts.sync_data.fetch_global_stats")
+    def test_sync_community_refreshes_at_four_hour_cron_boundary(self, mock_stats, mock_members):
+        with self.app.app_context():
+            # Cron runs every 4 hours; slightly under 4h (3h50m) must exceed 3h TTL and sync
+            nearly_four_hours_ago = datetime.utcnow() - timedelta(hours=3, minutes=50)
+            due_user = User(
+                username="DueUser",
+                is_member=True,
+                first_seen=nearly_four_hours_ago,
+                last_synced=nearly_four_hours_ago,
+            )
+            db.session.add(due_user)
+            db.session.flush()
+            db.session.add(
+                StatSnapshot(
+                    user_id=due_user.id,
+                    total_edits=10,
+                    home_wiki="arwiki",
+                    wiki_breakdown={},
+                    recorded_at=nearly_four_hours_ago,
+                )
+            )
+            db.session.commit()
+
+            mock_members.return_value = ["DueUser"]
+            mock_stats.return_value = {"total_edits": 42, "home_wiki": "arwiki", "wiki_breakdown": {}}
+
+            comm = Community.query.get(self.c1_id)
+            synced = sync_community(comm)
+            self.assertEqual(synced, 1)
+            mock_stats.assert_called_once_with("DueUser")
+            updated = User.query.filter_by(username="DueUser").first()
+            latest_snap = (
+                StatSnapshot.query.filter_by(user_id=updated.id)
+                .order_by(StatSnapshot.recorded_at.desc())
+                .first()
+            )
+            self.assertEqual(latest_snap.total_edits, 42)
+            self.assertGreater(updated.last_synced, nearly_four_hours_ago)
+
+    @patch("scripts.sync_data.fetch_members_from_meta")
+    @patch("scripts.sync_data.fetch_global_stats")
+    def test_sync_community_force_bypasses_freshness_ttl(self, mock_stats, mock_members):
+        with self.app.app_context():
+            one_hour_ago = datetime.utcnow() - timedelta(hours=1)
+            fresh_user = User(
+                username="ForceUser",
+                is_member=True,
+                first_seen=one_hour_ago,
+                last_synced=one_hour_ago,
+            )
+            db.session.add(fresh_user)
+            db.session.commit()
+
+            mock_members.return_value = ["ForceUser"]
+            mock_stats.return_value = {"total_edits": 99, "home_wiki": "frwiki", "wiki_breakdown": {}}
+
+            comm = Community.query.get(self.c1_id)
+            synced = sync_community(comm, force=True)
+            self.assertEqual(synced, 1)
+            mock_stats.assert_called_once_with("ForceUser")
+            updated = User.query.filter_by(username="ForceUser").first()
+            latest_snap = (
+                StatSnapshot.query.filter_by(user_id=updated.id)
+                .order_by(StatSnapshot.recorded_at.desc())
+                .first()
+            )
+            self.assertEqual(latest_snap.total_edits, 99)
+
+    @patch("scripts.sync_data.fetch_members_from_meta")
+    @patch("scripts.sync_data.fetch_global_stats")
+    def test_failed_stats_fetch_does_not_mark_user_synced(self, mock_stats, mock_members):
+        with self.app.app_context():
+            stale_time = datetime.utcnow() - timedelta(days=2)
+            user = User(
+                username="RetryUser",
+                is_member=True,
+                first_seen=stale_time,
+                last_synced=stale_time,
+            )
+            db.session.add(user)
+            db.session.flush()
+            db.session.add(
+                StatSnapshot(
+                    user_id=user.id,
+                    total_edits=50,
+                    home_wiki="arwiki",
+                    wiki_breakdown={},
+                    recorded_at=stale_time,
+                )
+            )
+            db.session.commit()
+
+            mock_members.return_value = ["RetryUser"]
+            mock_stats.return_value = None
+
+            comm = Community.query.get(self.c1_id)
+            synced = sync_community(comm)
+            self.assertEqual(synced, 1)
+            mock_stats.assert_called_once_with("RetryUser")
+            refreshed = User.query.filter_by(username="RetryUser").first()
+            snapshots = StatSnapshot.query.filter_by(user_id=refreshed.id).all()
+            self.assertEqual(len(snapshots), 1)
+            self.assertEqual(snapshots[0].total_edits, 50)
+            self.assertEqual(refreshed.last_synced, stale_time)
 
     @patch("scripts.sync_data.fetch_global_stats")
     def test_sync_project_contributors(self, mock_stats):

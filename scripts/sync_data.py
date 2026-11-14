@@ -6,8 +6,10 @@ and query Wikimedia CentralAuth global stats.
 """
 import sys
 import os
+import argparse
 from datetime import datetime
 import requests
+from sqlalchemy import func
 
 # Ensure app package is importable when script is executed directly
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -18,6 +20,9 @@ from app.models import Community, User, CommunityMember, StatSnapshot, Project
 from scripts.parse_members import fetch_members_from_meta
 
 DEFAULT_USER_AGENT = "Athar/1.0 (https://athar.toolforge.org; bonnjalal@gmail.com)"
+# Keep a 1-hour safety margin below the 4-hour Toolforge cron schedule (0 */4 * * *)
+# so slight pod-start or API jitter never causes an entire scheduled run to be skipped.
+FRESHNESS_TTL_SECONDS = 3 * 3600
 
 def fetch_global_stats(username, user_agent=None):
     """
@@ -68,7 +73,53 @@ def fetch_global_stats(username, user_agent=None):
         print(f"[Warning] Unexpected error parsing CentralAuth stats for {username}: {e}")
         return None
 
-def sync_community(community):
+def _sync_user_snapshot(username, is_member, now, force=False):
+    """
+    Resolve or create a User record and record a fresh StatSnapshot if stale or forced.
+    Returns (user, stats_updated: bool, skipped_fresh: bool).
+    """
+    user = User.query.filter(func.lower(User.username) == username.lower()).first()
+    is_fresh = False
+
+    if not user:
+        user = User(
+            username=username,
+            is_member=is_member,
+            first_seen=now,
+            last_synced=None,
+        )
+        db.session.add(user)
+        db.session.flush()
+    else:
+        if is_member:
+            user.is_member = True
+        if (
+            not force
+            and user.last_synced
+            and (now - user.last_synced).total_seconds() < FRESHNESS_TTL_SECONDS
+        ):
+            is_fresh = True
+
+    if is_fresh:
+        return user, False, True
+
+    stats = fetch_global_stats(username)
+    if stats:
+        snapshot = StatSnapshot(
+            user_id=user.id,
+            total_edits=stats["total_edits"],
+            home_wiki=stats["home_wiki"],
+            wiki_breakdown=stats["wiki_breakdown"],
+            recorded_at=now,
+        )
+        db.session.add(snapshot)
+        user.last_synced = now
+        return user, True, False
+
+    return user, False, False
+
+
+def sync_community(community, force=False):
     """
     Synchronize roster and CentralAuth statistics for a single community.
     Errors are isolated to this community so other communities are not aborted.
@@ -86,26 +137,20 @@ def sync_community(community):
         return 0
 
     synced_count = 0
+    updated_stats_count = 0
+    skipped_fresh_count = 0
     now = datetime.utcnow()
 
     for username in usernames:
         try:
-            # 1. User resolution
-            user = User.query.filter_by(username=username).first()
-            is_fresh = False
-            if not user:
-                user = User(
-                    username=username,
-                    is_member=True,
-                    first_seen=now,
-                    last_synced=None
-                )
-                db.session.add(user)
-                db.session.flush()
-            else:
-                user.is_member = True
-                if user.last_synced and (now - user.last_synced).total_seconds() < 4 * 3600:
-                    is_fresh = True
+            # 1. User & snapshot resolution
+            user, stats_updated, skipped_fresh = _sync_user_snapshot(
+                username, is_member=True, now=now, force=force
+            )
+            if stats_updated:
+                updated_stats_count += 1
+            elif skipped_fresh:
+                skipped_fresh_count += 1
 
             # 2. Community membership resolution
             membership = CommunityMember.query.filter_by(
@@ -125,36 +170,25 @@ def sync_community(community):
             else:
                 membership.verified = True
 
-            # 3. Fetch global stats from CentralAuth if not fresh (< 4 hours)
-            if not is_fresh:
-                stats = fetch_global_stats(username)
-                if stats:
-                    snapshot = StatSnapshot(
-                        user_id=user.id,
-                        total_edits=stats["total_edits"],
-                        home_wiki=stats["home_wiki"],
-                        wiki_breakdown=stats["wiki_breakdown"],
-                        recorded_at=now
-                    )
-                    db.session.add(snapshot)
-                user.last_synced = now
-
             synced_count += 1
         except Exception as member_err:
             print(f"[Warning] Error syncing member '{username}' for '{community.name}': {member_err}")
             continue
 
     db.session.commit()
-    print(f"[Sync] Successfully synchronized {synced_count}/{len(usernames)} members for '{community.name}'.")
+    print(
+        f"[Sync] Successfully synchronized {synced_count}/{len(usernames)} members "
+        f"for '{community.name}' (updated: {updated_stats_count}, skipped fresh: {skipped_fresh_count})."
+    )
     return synced_count
 
 
-def sync_project_contributors():
+def sync_project_contributors(force=False):
     """
     Scans all projects in the database to discover contributors (lead organizers,
     co-organizers, jury members, and participants).
     Creates User records for newly discovered contributors and fetches their
-    CentralAuth global stats if not synced within the last 4 hours.
+    CentralAuth global stats if not synced within the freshness window.
     Returns the count of project contributors processed.
     """
     projects = Project.query.all()
@@ -184,49 +218,32 @@ def sync_project_contributors():
     print(f"[Sync] Discovered {len(unique_usernames)} unique project contributor(s). Processing...")
     now = datetime.utcnow()
     synced_count = 0
+    updated_stats_count = 0
+    skipped_fresh_count = 0
 
     for username in unique_usernames:
         try:
-            user = User.query.filter_by(username=username).first()
-            is_fresh = False
-
-            if not user:
-                user = User(
-                    username=username,
-                    is_member=False,  # Discovered from projects, not formal community roster
-                    first_seen=now,
-                    last_synced=None
-                )
-                db.session.add(user)
-                db.session.flush()
-            else:
-                if user.last_synced and (now - user.last_synced).total_seconds() < 4 * 3600:
-                    is_fresh = True
-
-            if not is_fresh:
-                stats = fetch_global_stats(username)
-                if stats:
-                    snapshot = StatSnapshot(
-                        user_id=user.id,
-                        total_edits=stats["total_edits"],
-                        home_wiki=stats["home_wiki"],
-                        wiki_breakdown=stats["wiki_breakdown"],
-                        recorded_at=now
-                    )
-                    db.session.add(snapshot)
-                user.last_synced = now
-
+            _, stats_updated, skipped_fresh = _sync_user_snapshot(
+                username, is_member=False, now=now, force=force
+            )
+            if stats_updated:
+                updated_stats_count += 1
+            elif skipped_fresh:
+                skipped_fresh_count += 1
             synced_count += 1
         except Exception as err:
             print(f"[Warning] Error syncing project contributor '{username}': {err}")
             continue
 
     db.session.commit()
-    print(f"[Sync] Successfully processed {synced_count}/{len(unique_usernames)} project contributors.")
+    print(
+        f"[Sync] Successfully processed {synced_count}/{len(unique_usernames)} project contributors "
+        f"(updated: {updated_stats_count}, skipped fresh: {skipped_fresh_count})."
+    )
     return synced_count
 
 
-def run_sync():
+def run_sync(force=False):
     """
     Multi-community sync loop:
     Iterates over all registered communities in the database with strict error isolation.
@@ -247,12 +264,12 @@ def run_sync():
             communities = [default_comm]
 
         total_communities = len(communities)
-        print(f"[Sync] Starting ingestion for {total_communities} registered community/communities...")
+        print(f"[Sync] Starting ingestion for {total_communities} registered community/communities (force={force})...")
 
         for index, community in enumerate(communities, start=1):
             try:
                 print(f"\n--- [{index}/{total_communities}] {community.name} (slug: {community.slug}) ---")
-                sync_community(community)
+                sync_community(community, force=force)
             except Exception as comm_err:
                 db.session.rollback()
                 print(f"[Error] Failed to process community '{community.name}': {comm_err}")
@@ -261,7 +278,7 @@ def run_sync():
         # Synchronize project contributors (organizers, jury, participants)
         try:
             print("\n--- Synchronizing Project Contributors ---")
-            sync_project_contributors()
+            sync_project_contributors(force=force)
         except Exception as proj_err:
             db.session.rollback()
             print(f"[Error] Failed to process project contributors: {proj_err}")
@@ -269,4 +286,7 @@ def run_sync():
         print("\n[Sync] Multi-community synchronization cycle complete.")
 
 if __name__ == "__main__":
-    run_sync()
+    parser = argparse.ArgumentParser(description="Synchronize Wikimedia community rosters and CentralAuth metrics.")
+    parser.add_argument("--force", action="store_true", help="Bypass the freshness TTL cache and force CentralAuth queries.")
+    args = parser.parse_args()
+    run_sync(force=args.force)
