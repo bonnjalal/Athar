@@ -247,7 +247,7 @@ def manual_sync(slug):
     community = Community.query.filter_by(slug=slug).first_or_404()
     from scripts.sync_data import sync_community
     try:
-        synced_count = sync_community(community)
+        synced_count = sync_community(community, force=True)
         flash(f"تم بنجاح تحديث وتزامن {synced_count} عضواً لمجتمع '{community.name}'.", "success")
     except Exception as e:
         flash(f"خطأ أثناء تحديث بيانات المجتمع: {str(e)}", "error")
