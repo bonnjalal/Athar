@@ -1,18 +1,22 @@
 import sys
 import os
 import unittest
+from unittest.mock import patch
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from app import create_app, db
-from app.models import Project, Community
+from app.models import Project, Community, User
 
 from config import Config
+
 
 class TestConfig(Config):
     TESTING = True
     SQLALCHEMY_DATABASE_URI = "sqlite:///:memory:"
     WTF_CSRF_ENABLED = False
+    MOCK_AUTH = False
+
 
 class TestRoutesAndSecurity(unittest.TestCase):
     def setUp(self):
@@ -26,23 +30,35 @@ class TestRoutesAndSecurity(unittest.TestCase):
             db.session.remove()
             db.drop_all()
 
+    def _login_as(self, username, is_member=True, is_admin=False):
+        with self.app.app_context():
+            user = User.query.filter_by(username=username).first()
+            if not user:
+                user = User(username=username, is_member=is_member, is_admin=is_admin)
+                db.session.add(user)
+            else:
+                user.is_member = is_member
+                user.is_admin = is_admin
+            db.session.commit()
+        with self.client.session_transaction() as sess:
+            sess.pop("logged_out", None)
+            sess["username"] = username
+            sess["is_member"] = is_member
+            sess["is_admin"] = is_admin
+
     def test_dashboard_accessible(self):
         response = self.client.get("/")
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Athar", response.data)
 
     def test_mock_auth_login(self):
-        with self.client.session_transaction() as sess:
-            sess["username"] = "TestVolunteer"
-            sess["is_member"] = True
+        self._login_as("TestVolunteer", is_member=True)
 
         response = self.client.get("/project/new")
         self.assertEqual(response.status_code, 200)
 
     def test_create_project_web(self):
-        with self.client.session_transaction() as sess:
-            sess["username"] = "TestVolunteer"
-            sess["is_member"] = True
+        self._login_as("TestVolunteer", is_member=True)
 
         response = self.client.post("/project/new", data={
             "title": "Web Test Project",
@@ -61,9 +77,7 @@ class TestRoutesAndSecurity(unittest.TestCase):
             self.assertEqual(p.lead_organizer, "TestVolunteer")
 
     def test_create_contest_with_chips_web(self):
-        with self.client.session_transaction() as sess:
-            sess["username"] = "MoroccoLead"
-            sess["is_member"] = True
+        self._login_as("MoroccoLead", is_member=True)
 
         response = self.client.post("/project/new", data={
             "title": "Wiki Loves Monuments Contest",
@@ -89,22 +103,21 @@ class TestRoutesAndSecurity(unittest.TestCase):
             self.assertEqual(p.target_wiki_url, "https://commons.wikimedia.org")
 
     def test_login_mock_auth_redirects_cleanly(self):
-        # Without prior community
-        res = self.client.get("/login")
-        self.assertEqual(res.status_code, 302)
-        self.assertEqual(res.headers.get("Location"), "/")
+        with patch.dict(self.app.config, {"MOCK_AUTH": True}):
+            # Without prior community
+            res = self.client.get("/login")
+            self.assertEqual(res.status_code, 302)
+            self.assertEqual(res.headers.get("Location"), "/")
 
-        # With prior community slug in session
-        with self.client.session_transaction() as sess:
-            sess["community_slug"] = "wm-ma"
-        res = self.client.get("/login")
-        self.assertEqual(res.status_code, 302)
-        self.assertEqual(res.headers.get("Location"), "/wm-ma/")
+            # With prior community slug in session
+            with self.client.session_transaction() as sess:
+                sess["community_slug"] = "wm-ma"
+            res = self.client.get("/login")
+            self.assertEqual(res.status_code, 302)
+            self.assertEqual(res.headers.get("Location"), "/wm-ma/")
 
     def test_logout_redirects_cleanly(self):
-        with self.client.session_transaction() as sess:
-            sess["username"] = "TestVolunteer"
-            sess["is_member"] = True
+        self._login_as("TestVolunteer", is_member=True)
         res = self.client.get("/logout")
         self.assertEqual(res.status_code, 302)
         self.assertEqual(res.headers.get("Location"), "/")
@@ -117,10 +130,18 @@ class TestRoutesAndSecurity(unittest.TestCase):
         self.assertEqual(res.status_code, 302)
         self.assertIn("/login", res.headers.get("Location"))
 
-    def test_add_community_persists_to_db(self):
-        with self.client.session_transaction() as sess:
-            sess["username"] = "MoroccoVolunteer"
+    @patch("app.routes.admin.fetch_members_from_meta", return_value=["Bonnjalal00"])
+    def test_add_community_persists_to_db(self, mock_fetch):
+        # Non-admin member must be denied (403)
+        self._login_as("MoroccoVolunteer", is_member=True, is_admin=False)
+        res_denied = self.client.post("/add-community", data={
+            "community_name": "Wikimedia Algeria",
+            "community_link": "https://meta.wikimedia.org/wiki/Wikimedia_DZ/Members",
+        })
+        self.assertEqual(res_denied.status_code, 403)
 
+        # Tool Admin succeeds
+        self._login_as("Bonnjalal00", is_member=False, is_admin=True)
         res = self.client.post("/add-community", data={
             "community_name": "Wikimedia Algeria",
             "community_link": "https://meta.wikimedia.org/wiki/Wikimedia_DZ/Members",
@@ -129,12 +150,13 @@ class TestRoutesAndSecurity(unittest.TestCase):
 
         self.assertEqual(res.status_code, 302)
         self.assertEqual(res.headers.get("Location"), "/wikimedia-algeria/")
+        mock_fetch.assert_called_once()
 
         with self.app.app_context():
             comm = Community.query.filter_by(slug="wikimedia-algeria").first()
             self.assertIsNotNone(comm)
             self.assertEqual(comm.name, "Wikimedia Algeria")
-            self.assertEqual(comm.meta_roster_page, "https://meta.wikimedia.org/wiki/Wikimedia_DZ/Members")
+            self.assertEqual(comm.meta_roster_page, "Wikimedia_DZ/Members")
 
     def test_index_displays_db_communities(self):
         with self.app.app_context():
@@ -152,9 +174,7 @@ class TestRoutesAndSecurity(unittest.TestCase):
         self.assertIn(b"wm-ly", res.data)
 
     def test_create_project_web_custom_type(self):
-        with self.client.session_transaction() as sess:
-            sess["username"] = "TestVolunteer"
-            sess["is_member"] = True
+        self._login_as("TestVolunteer", is_member=True)
 
         response = self.client.post("/project/new", data={
             "title": "Custom Activity Project",
@@ -190,9 +210,7 @@ class TestRoutesAndSecurity(unittest.TestCase):
             db.session.commit()
             p_id = p.id
 
-        with self.client.session_transaction() as sess:
-            sess["username"] = "MoroccoVolunteer"
-            sess["is_member"] = True
+        self._login_as("MoroccoVolunteer", is_member=True)
 
         response = self.client.post(f"/project/{p_id}/edit", data={
             "title": "Existing Workshop",
@@ -212,9 +230,7 @@ class TestRoutesAndSecurity(unittest.TestCase):
 
     def test_create_and_edit_project_dates_and_status(self):
         from datetime import date
-        with self.client.session_transaction() as sess:
-            sess["username"] = "OrganizerUser"
-            sess["is_member"] = True
+        self._login_as("OrganizerUser", is_member=True)
 
         # Test creating future project -> auto status is Planned
         response = self.client.post("/project/new", data={
@@ -292,9 +308,7 @@ class TestRoutesAndSecurity(unittest.TestCase):
         self.assertIn(b"Testing public view", response.data)
 
     def test_create_project_wiki_normalization_and_security(self):
-        with self.client.session_transaction() as sess:
-            sess["username"] = "TestVolunteer"
-            sess["is_member"] = True
+        self._login_as("TestVolunteer", is_member=True)
 
         # Valid project code 'commons'
         res_ok = self.client.post("/project/new", data={
@@ -449,9 +463,7 @@ class TestRoutesAndSecurity(unittest.TestCase):
         self.assertIn("فترة مخصصة".encode("utf-8"), res.data)
 
     def test_create_project_with_dates_and_status_auto(self):
-        with self.client.session_transaction() as sess:
-            sess["username"] = "MoroccoVolunteer"
-            sess["is_member"] = True
+        self._login_as("MoroccoVolunteer", is_member=True)
 
         # Past activity -> Should be automatically Completed
         res_past = self.client.post("/project/new", data={

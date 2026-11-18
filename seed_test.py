@@ -1,6 +1,7 @@
 from datetime import date, datetime
 from app import create_app, db
-from app.models import Community, User, CommunityMember, StatSnapshot, Project
+from app.models import Community, User, CommunityMember, StatSnapshot, Project, ProjectTag
+from app.query_utils import sync_project_tags
 
 app = create_app()
 
@@ -8,6 +9,7 @@ with app.app_context():
     db.create_all()
 
     # مسح البيانات القديمة لتفادي التكرار عند كل تجربة
+    ProjectTag.query.delete()
     Project.query.delete()
     StatSnapshot.query.delete()
     CommunityMember.query.delete()
@@ -72,6 +74,7 @@ with app.app_context():
         u = User(
             username=item["username"],
             is_member=True,
+            is_admin=(item["username"] == "Bonnjalal00"),
             first_seen=datetime.utcnow(),
             last_synced=datetime.utcnow(),
         )
@@ -91,74 +94,81 @@ with app.app_context():
         db.session.add_all([cm, snap])
 
     # 3. إضافة المشاريع التجريبية (Projects)
-    projects_sample = [
-        Project(
-            community_id=wm_ma.id,
-            title="Wiki Loves Monuments 2026 Morocco",
-            description="Annual photography contest documenting historic Moroccan monuments on Wikimedia Commons.",
-            project_type="Contest / Competition",
-            target_wiki="commons",
-            start_date=date(2026, 9, 1),
-            end_date=date(2026, 10, 31),
-            status="In Progress",
-            lead_organizer="MoroccoVolunteer",
-            co_organizers=["Bonnjalal00", "Mounir_Afifi"],
-            jury_members=["Rotana_Wiki"],
-        ),
-        Project(
-            community_id=wm_ma.id,
-            title="OpenRefine & Wikidata Workshop",
-            description="Hands-on training session for university students on structured data.",
-            project_type="Workshop",
-            target_wiki="wikidata",
-            start_date=date(2026, 10, 10),
-            end_date=date(2026, 10, 12),
-            status="Completed",
-            lead_organizer="Bonnjalal00",
-            co_organizers=["MoroccoVolunteer"],
-            jury_members=[],
-        ),
-        Project(
-            community_id=wm_ma.id,
-            title="Moroccan Cultural Heritage Edit-a-thon",
-            description="Collaborative editing drive expanding Arabic Wikipedia articles.",
-            project_type="Edit-a-thon",
-            target_wiki="ar.wikipedia",
-            start_date=date(2026, 10, 15),
-            end_date=date(2026, 10, 25),
-            status="In Progress",
-            lead_organizer="Mounir_Afifi",
-            co_organizers=["Rotana_Wiki"],
-            jury_members=[],
-        ),
-        Project(
-            community_id=wm_ma.id,
-            title="Medina Architectural Photo Walk",
-            description="Guided photography walk capturing high-resolution images of traditional gates.",
-            project_type="Photo Walk",
-            target_wiki="commons",
-            start_date=date(2026, 11, 2),
-            end_date=date(2026, 11, 2),
-            status="Planned",
-            lead_organizer="MoroccoVolunteer",
-            co_organizers=[],
-            jury_members=[],
-        ),
-        Project(
-            community_id=wm_tn.id,
-            title="Carthage Archaeological Sites Edit-a-thon",
-            description="Documenting Kuwaiti historical landmarks across Arabic Wikipedia.",
-            project_type="Edit-a-thon",
-            target_wiki="ar.wikipedia",
-            start_date=date(2026, 10, 5),
-            end_date=date(2026, 10, 20),
-            status="Completed",
-            lead_organizer="KuwaitiEditor",
-            co_organizers=[],
-            jury_members=[],
-        ),
-    ]
+    p1 = Project(
+        community_id=wm_ma.id,
+        title="Wiki Loves Monuments 2026 Morocco",
+        description="Annual photography contest documenting historic Moroccan monuments on Wikimedia Commons.",
+        project_type="Contest / Competition",
+        target_wiki="commons",
+        wiki_link="https://commons.wikimedia.org/wiki/Commons:Wiki_Loves_Monuments_in_Morocco",
+        campaign="Wiki Loves Monuments",
+        start_date=date(2026, 9, 1),
+        end_date=date(2026, 10, 31),
+        status="In Progress",
+        lead_organizer="MoroccoVolunteer",
+        co_organizers=["Bonnjalal00", "Mounir_Afifi"],
+        jury_members=["Rotana_Wiki"],
+    )
+    p2 = Project(
+        community_id=wm_ma.id,
+        title="OpenRefine & Wikidata Workshop",
+        description="Hands-on training session for university students on structured data.",
+        project_type="Workshop",
+        target_wiki="wikidata",
+        wiki_link="https://eventmetrics.wmcloud.org",
+        campaign="1Lib1Ref",
+        start_date=date(2026, 10, 10),
+        end_date=date(2026, 10, 12),
+        status="Completed",
+        lead_organizer="Bonnjalal00",
+        co_organizers=["MoroccoVolunteer"],
+        jury_members=[],
+    )
+    p3 = Project(
+        community_id=wm_ma.id,
+        title="Moroccan Cultural Heritage Edit-a-thon",
+        description="Collaborative editing drive expanding Arabic Wikipedia articles.",
+        project_type="Edit-a-thon",
+        target_wiki="ar.wikipedia",
+        campaign="Wiki Loves Ramadan",
+        start_date=date(2026, 10, 15),
+        end_date=date(2026, 10, 25),
+        status="In Progress",
+        lead_organizer="Mounir_Afifi",
+        co_organizers=["Rotana_Wiki"],
+        jury_members=[],
+    )
+    p4 = Project(
+        community_id=wm_ma.id,
+        title="Medina Architectural Photo Walk",
+        description="Guided photography walk capturing high-resolution images of traditional gates.",
+        project_type="Photo Walk",
+        target_wiki="commons",
+        start_date=date(2026, 11, 2),
+        end_date=date(2026, 11, 2),
+        status="Planned",
+        lead_organizer="MoroccoVolunteer",
+        co_organizers=[],
+        jury_members=[],
+    )
+    p5 = Project(
+        community_id=wm_tn.id,
+        title="Carthage Archaeological Sites Edit-a-thon",
+        description="Documenting Kuwaiti historical landmarks across Arabic Wikipedia.",
+        project_type="Edit-a-thon",
+        target_wiki="ar.wikipedia",
+        start_date=date(2026, 10, 5),
+        end_date=date(2026, 10, 20),
+        status="Completed",
+        lead_organizer="KuwaitiEditor",
+        co_organizers=[],
+        jury_members=[],
+    )
 
-    db.session.add_all(projects_sample)
+    db.session.add_all([p1, p2, p3, p4, p5])
+    db.session.flush()
+    sync_project_tags(p1, ["heritage", "photography", "morocco"])
+    sync_project_tags(p2, ["wikidata", "training"])
+    sync_project_tags(p3, ["ramadan", "culture"])
     db.session.commit()
     print(" Done! Test data inserted successfully into dev.db.")

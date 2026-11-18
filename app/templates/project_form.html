@@ -1,20 +1,64 @@
 {% extends "base.html" %}
 
-{% block content %}
-<div class="form-container">
-    <h2>{% if project %}تعديل النشاط{% else %}تسجيل نشاط مجتمعي جديد{% endif %}</h2>
-    <p class="form-subtitle">سجل فعاليات ورشات التحرير، مسابقات التصوير، أو مشاريع ويكي بيانات.</p>
+{% block title %}{{ _('athar-form-edit-title') if project else _('athar-form-new-title') }} — {{ _('athar-brand-name') }}{% endblock %}
 
-    <form method="POST" class="cdx-form">
-        <!-- Flask-WTF CSRF Token -->
+{% block content %}
+{% set fd = form_data if form_data is not none else {} %}
+{% set val_title = (fd.get('title') or '') if form_data is not none else (project.title if project else '') %}
+{% set val_type = (fd.get('project_type') or 'Workshop') if form_data is not none else (project.project_type if project else 'Workshop') %}
+{% set val_custom_type = (fd.get('custom_project_type') or '') if form_data is not none else (project.project_type if (project and project.project_type not in ['Workshop', 'Edit-a-thon', 'Photo Walk', 'Contest', 'Contest / Competition', 'GLAM', 'Education Program', 'Outreach', 'Campaign', 'Conference / Meetup', 'Hackathon', 'Translation', 'Exhibition']) else '') %}
+{% set val_target_wiki = (fd.get('target_wiki') or 'arwiki') if form_data is not none else (project.target_wiki if project else 'arwiki') %}
+{% set val_wiki_link = (fd.get('wiki_link') or '') if form_data is not none else (project.wiki_link if project and project.wiki_link else '') %}
+{% set val_campaign = (fd.get('campaign') or '') if form_data is not none else (project.campaign if project and project.campaign else '') %}
+{% set val_tags = (fd.get('tags') or '') if form_data is not none else ((project.tags|join(',')) if project and project.tags else '') %}
+{% set val_start_date = (fd.get('start_date') or '') if form_data is not none else (project.start_date.strftime('%Y-%m-%d') if project and project.start_date else '') %}
+{% set val_end_date = (fd.get('end_date') or '') if form_data is not none else (project.end_date.strftime('%Y-%m-%d') if project and project.end_date else '') %}
+{% set val_status = (fd.get('status') or 'In Progress') if form_data is not none else (project.status if project else 'In Progress') %}
+{% set val_description = (fd.get('description') or '') if form_data is not none else (project.description if project else '') %}
+{% set val_primary_lang = (fd.get('primary_lang') or current_locale()) if form_data is not none else (project.primary_lang if project and project.primary_lang else current_locale()) %}
+{% set raw_tr_fd = fd.get('translations_json') if form_data is not none else None %}
+{% set val_translations_json = (raw_tr_fd if raw_tr_fd else '{}') if form_data is not none else (project.translations|tojson if project and project.translations else '{}') %}
+{% set val_co_orgs = (fd.get('co_organizers') or '') if form_data is not none else ((project.co_organizers|join(',')) if project and project.co_organizers else '') %}
+{% set val_is_contest = ('1' if fd.get('is_contest') else '') if form_data is not none else ('1' if (project and project.is_contest) else '') %}
+{% set val_jury = (fd.get('jury_members') or '') if form_data is not none else ((project.jury_members|join(',')) if project and project.jury_members else '') %}
+{% set val_participants = (fd.get('participants') or '') if form_data is not none else ((project.participants|join('\n')) if project and project.participants else '') %}
+{% set val_res_summary = (fd.get('results_summary') or '') if form_data is not none else (project.results.summary if project and project.results and project.results.summary else '') %}
+{% set val_res_winners = (fd.get('results_winners') or '') if form_data is not none else ((project.results.winners|join('\n')) if project and project.results and project.results.winners else '') %}
+{% set val_res_created = (fd.get('results_articles_created') or '') if form_data is not none else (project.results.metrics.articles_created if project and project.results and project.results.metrics else '') %}
+{% set val_res_improved = (fd.get('results_articles_improved') or '') if form_data is not none else (project.results.metrics.articles_improved if project and project.results and project.results.metrics else '') %}
+{% set val_res_uploaded = (fd.get('results_files_uploaded') or '') if form_data is not none else (project.results.metrics.files_uploaded if project and project.results and project.results.metrics else '') %}
+{% set val_res_notes = (fd.get('results_notes') or '') if form_data is not none else (project.results.notes if project and project.results and project.results.notes else '') %}
+{% set has_results = true if (val_res_summary or val_res_winners or val_res_created or val_res_improved or val_res_uploaded or val_res_notes) else false %}
+{% set std_types = ['Workshop', 'Edit-a-thon', 'Photo Walk', 'Contest', 'Contest / Competition', 'GLAM', 'Education Program', 'Outreach', 'Campaign', 'Conference / Meetup', 'Hackathon', 'Translation', 'Exhibition'] %}
+{% set is_custom_type = true if (val_type == 'Other' or (val_type and val_type not in std_types)) else false %}
+
+<div class="form-container">
+    <form method="POST" class="cdx-form" id="project-activity-form">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+
+        <div class="form-title-bar">
+            <h2>{{ _('athar-form-edit-title') if project else _('athar-form-new-title') }}</h2>
+            <div class="source-lang-compact">
+                <label for="primary_lang_picker" class="source-lang-label">{{ _('athar-form-primary-lang') }}</label>
+                <div class="lang-combobox lang-combobox--source" id="primary-lang-combobox">
+                    <input type="text" id="primary_lang_picker" class="cdx-text-input lang-combobox-input"
+                        value="{{ val_primary_lang }}"
+                        placeholder="{{ _('athar-form-lang-custom-placeholder') }}"
+                        autocomplete="off" aria-autocomplete="list">
+                    <div class="lang-combobox-menu" id="primary_lang_menu" hidden></div>
+                </div>
+                <input type="hidden" id="primary_lang" name="primary_lang" value="{{ val_primary_lang }}">
+            </div>
+        </div>
 
         {% if communities %}
         <div class="form-group">
-            <label for="community_id" class="cdx-label">المجتمع التابع له النشاط</label>
+            <label for="community_id" class="cdx-label">{{ _('athar-field-community') }}</label>
             <select id="community_id" name="community_id" class="cdx-select">
                 {% for comm in communities %}
-                    <option value="{{ comm.id }}" {% if (project and project.community_id == comm.id) or (not project and selected_community_slug == comm.slug) %}selected{% endif %}>
+                    {% set selected_cid = (fd.get('community_id')|string) if (form_data is not none and fd.get('community_id')) else '' %}
+                    <option value="{{ comm.id }}"
+                        {% if (selected_cid and selected_cid == (comm.id|string)) or (not selected_cid and project and project.community_id == comm.id) or (not selected_cid and not project and selected_community_slug == comm.slug) %}selected{% endif %}>
                         {{ comm.name }}
                     </option>
                 {% endfor %}
@@ -23,260 +67,269 @@
         {% endif %}
 
         <div class="form-group">
-            <label for="title" class="cdx-label">عنوان النشاط / المشروع</label>
+            <label for="title" class="cdx-label">{{ _('athar-form-title-label') }}</label>
             <input type="text" id="title" name="title" required class="cdx-text-input"
-                value="{{ project.title if project else '' }}" placeholder="مثال: ورشة تحرير ويكيبيديا بجامعة الرباط">
+                value="{{ val_title }}" placeholder="{{ _('athar-form-title-placeholder') }}">
         </div>
 
         <div class="form-row">
             <div class="form-group flex-1">
-                <label for="project_type" class="cdx-label">نوع النشاط</label>
+                <label for="project_type" class="cdx-label">{{ _('athar-field-type') }}</label>
                 <select id="project_type" name="project_type" class="cdx-select" onchange="handleProjectTypeChange(this.value)">
-                    <option value="Workshop" {% if not project or project.project_type == 'Workshop' %}selected{% endif %}>
-                        ورشة تدريبية
-                    </option>
-                    <option value="Edit-a-thon" {% if project and project.project_type == 'Edit-a-thon' %}selected{% endif %}>
-                        ماراثون تحرير
-                    </option>
-                    <option value="Photo Walk" {% if project and project.project_type == 'Photo Walk' %}selected{% endif %}>
-                        جولة تصوير
-                    </option>
-                    <option value="Contest" {% if project and (project.project_type == 'Contest' or 'Contest' in project.project_type or 'مسابقة' in project.project_type) %}selected{% endif %}>
-                        مسابقة / منافسة
-                    </option>
-                    <option value="GLAM" {% if project and project.project_type == 'GLAM' %}selected{% endif %}>
-                        شراكة ثقافية
-                    </option>
-                    <option value="Education Program" {% if project and (project.project_type == 'Education Program' or project.project_type == 'Outreach') %}selected{% endif %}>
-                        برنامج تعليمي / شراكة جامعية
-                    </option>
-                    <option value="Campaign" {% if project and project.project_type == 'Campaign' %}selected{% endif %}>
-                        حملة محتوى
-                    </option>
-                    <option value="Conference / Meetup" {% if project and project.project_type == 'Conference / Meetup' %}selected{% endif %}>
-                        مؤتمر أو لقاء مجتمعي
-                    </option>
-                    <option value="Hackathon" {% if project and project.project_type == 'Hackathon' %}selected{% endif %}>
-                        فعالية برمجية / هاكاثون
-                    </option>
-                    <option value="Translation" {% if project and project.project_type == 'Translation' %}selected{% endif %}>
-                        حملة ترجمة
-                    </option>
-                    <option value="Exhibition" {% if project and project.project_type == 'Exhibition' %}selected{% endif %}>
-                        معرض وتوثيق
-                    </option>
-                    <option value="Other" {% if project and project.project_type not in ['Workshop', 'Edit-a-thon', 'Photo Walk', 'Contest', 'GLAM', 'Education Program', 'Outreach', 'Campaign', 'Conference / Meetup', 'Hackathon', 'Translation', 'Exhibition'] %}selected{% endif %}>
-                        أخرى - تحديد يدوي...
-                    </option>
+                    <option value="Workshop" {% if not val_type or val_type == 'Workshop' %}selected{% endif %}>{{ _('athar-type-workshop') }}</option>
+                    <option value="Edit-a-thon" {% if val_type == 'Edit-a-thon' %}selected{% endif %}>{{ _('athar-type-edit-a-thon') }}</option>
+                    <option value="Photo Walk" {% if val_type == 'Photo Walk' %}selected{% endif %}>{{ _('athar-type-photo-walk') }}</option>
+                    <option value="Contest" {% if val_type == 'Contest' or 'Contest' in val_type or 'مسابقة' in val_type %}selected{% endif %}>{{ _('athar-type-contest') }}</option>
+                    <option value="GLAM" {% if val_type == 'GLAM' %}selected{% endif %}>{{ _('athar-type-glam') }}</option>
+                    <option value="Education Program" {% if val_type in ('Education Program', 'Outreach') %}selected{% endif %}>{{ _('athar-type-education') }}</option>
+                    <option value="Campaign" {% if val_type == 'Campaign' %}selected{% endif %}>{{ _('athar-type-campaign') }}</option>
+                    <option value="Conference / Meetup" {% if val_type == 'Conference / Meetup' %}selected{% endif %}>{{ _('athar-type-conference') }}</option>
+                    <option value="Hackathon" {% if val_type == 'Hackathon' %}selected{% endif %}>{{ _('athar-type-hackathon') }}</option>
+                    <option value="Translation" {% if val_type == 'Translation' %}selected{% endif %}>{{ _('athar-type-translation') }}</option>
+                    <option value="Exhibition" {% if val_type == 'Exhibition' %}selected{% endif %}>{{ _('athar-type-exhibition') }}</option>
+                    <option value="Other" {% if is_custom_type %}selected{% endif %}>{{ _('athar-form-type-other') }}</option>
                 </select>
             </div>
 
             <div class="form-group flex-1">
-                <label for="target_wiki" class="cdx-label">رمز مشروع ويكيميديا</label>
+                <label for="target_wiki" class="cdx-label">{{ _('athar-form-target-wiki-label') }}</label>
                 <input type="text" id="target_wiki" name="target_wiki" class="cdx-text-input" list="wikis-list"
-                    value="{{ project.target_wiki if project else 'arwiki' }}"
-                    placeholder="مثال: arwiki, commons, wikidata, arywiki"
+                    value="{{ val_target_wiki }}"
+                    placeholder="{{ _('athar-form-target-wiki-placeholder') }}"
                     autocomplete="off" required oninput="previewWikiLink(this.value)">
                 <datalist id="wikis-list">
-                    <option value="arwiki">ويكيبيديا العربية (ar.wikipedia.org)</option>
-                    <option value="arywiki">ويكيبيديا المغربية - الدارجة (ary.wikipedia.org)</option>
-                    <option value="commons">ويكيميديا كومنز (commons.wikimedia.org)</option>
-                    <option value="wikidata">ويكي بيانات (wikidata.org)</option>
-                    <option value="metawiki">ميتا-ويكي (meta.wikimedia.org)</option>
-                    <option value="enwiki">ويكيبيديا الإنجليزية (en.wikipedia.org)</option>
-                    <option value="frwiki">ويكيبيديا الفرنسية (fr.wikipedia.org)</option>
-                    <option value="zghwiki">ويكيبيديا الأمازيغية (zgh.wikipedia.org)</option>
-                    <option value="shiwiki">ويكيبيديا الشلحية (shi.wikipedia.org)</option>
-                    <option value="arwikisource">ويكي مصدر العربي (ar.wikisource.org)</option>
-                    <option value="arwiktionary">ويكاموس العربي (ar.wiktionary.org)</option>
-                    <option value="wikifunctions">ويكي الدوال (wikifunctions.org)</option>
+                    <option value="arwiki">ar.wikipedia.org</option>
+                    <option value="arywiki">ary.wikipedia.org</option>
+                    <option value="commons">commons.wikimedia.org</option>
+                    <option value="wikidata">www.wikidata.org</option>
+                    <option value="metawiki">meta.wikimedia.org</option>
+                    <option value="enwiki">en.wikipedia.org</option>
+                    <option value="frwiki">fr.wikipedia.org</option>
+                    <option value="zghwiki">zgh.wikipedia.org</option>
+                    <option value="shiwiki">shi.wikipedia.org</option>
+                    <option value="arwikisource">ar.wikisource.org</option>
+                    <option value="arwiktionary">ar.wiktionary.org</option>
+                    <option value="wikifunctions">www.wikifunctions.org</option>
                 </datalist>
-                <div id="target_wiki_preview" style="margin-top: 6px; font-size: 0.85rem;"></div>
+                <div id="target_wiki_preview" class="wiki-preview-msg" aria-live="polite"></div>
             </div>
         </div>
 
+        <!-- Custom Activity Type Field -->
+        <div class="form-group" id="custom-activity-group" style="display: {% if is_custom_type %}block{% else %}none{% endif %};">
+            <label for="custom_project_type" class="cdx-label">{{ _('athar-form-custom-type-label') }}</label>
+            <input type="text" id="custom_project_type" name="custom_project_type" class="cdx-text-input"
+                   value="{{ val_custom_type }}"
+                   placeholder="{{ _('athar-form-custom-type-placeholder') }}">
+        </div>
+
+        <!-- Activity External Page Link & Umbrella Campaign -->
         <div class="form-row">
             <div class="form-group flex-1">
-                <label for="start_date" class="cdx-label">تاريخ بدء النشاط *</label>
-                <input type="date" id="start_date" name="start_date" class="cdx-text-input" required
-                    value="{{ project.start_date.strftime('%Y-%m-%d') if project and project.start_date else '' }}"
-                    onchange="syncStatusFromDates()">
+                <label for="wiki_link" class="cdx-label">{{ _('athar-form-wiki-link-label') }}</label>
+                <input type="text" inputmode="url" id="wiki_link" name="wiki_link" class="cdx-text-input"
+                    value="{{ val_wiki_link }}"
+                    placeholder="https://..."
+                    oninput="validateWikiLinkInput(this.value)">
+                <div id="wiki_link_preview" class="wiki-preview-msg" aria-live="polite"></div>
             </div>
-            <div class="form-group flex-1">
-                <label for="end_date" class="cdx-label">تاريخ انتهاء النشاط *</label>
-                <input type="date" id="end_date" name="end_date" class="cdx-text-input" required
-                    value="{{ project.end_date.strftime('%Y-%m-%d') if project and project.end_date else '' }}"
-                    onchange="syncStatusFromDates()">
-            </div>
-            <div class="form-group flex-1">
-                <label for="status" class="cdx-label">حالة النشاط</label>
-                <select id="status" name="status" class="cdx-select" onchange="handleStatusManualChange(this.value)">
-                    <option value="Planned" {% if project and project.status == 'Planned' %}selected{% endif %}>مخطط له (Planned)</option>
-                    <option value="In Progress" {% if not project or project.status == 'In Progress' %}selected{% endif %}>قيد التنفيذ (In Progress)</option>
-                    <option value="Completed" {% if project and project.status == 'Completed' %}selected{% endif %}>مكتمل (Completed)</option>
-                    <option value="Canceled" {% if project and (project.status == 'Canceled' or project.status == 'Cancelled') %}selected{% endif %}>ملغي (Canceled)</option>
-                </select>
-                <div style="font-size: 0.78rem; color: #54595d; margin-top: 4px;">
-                    تحدد الحالة آلياً وفقاً للتواريخ (ويمكن تحديد ملغي يدوياً).
-                </div>
-            </div>
-        </div>
 
-        <!-- Custom Activity Type Field (revealed when 'Other' is chosen or for custom types) -->
-        <div class="form-group" id="custom-activity-group" style="display: {% if project and project.project_type not in ['Workshop', 'Edit-a-thon', 'Photo Walk', 'Contest', 'GLAM', 'Education Program', 'Outreach', 'Campaign', 'Conference / Meetup', 'Hackathon', 'Translation', 'Exhibition'] %}block{% else %}none{% endif %}; margin-bottom: 1rem;">
-            <label for="custom_project_type" class="cdx-label">اكتب نوع النشاط المخصص</label>
-            <input type="text" id="custom_project_type" name="custom_project_type" class="cdx-text-input"
-                   value="{% if project and project.project_type not in ['Workshop', 'Edit-a-thon', 'Photo Walk', 'Contest', 'GLAM', 'Education Program', 'Outreach', 'Campaign', 'Conference / Meetup', 'Hackathon', 'Translation', 'Exhibition'] %}{{ project.project_type }}{% endif %}"
-                   placeholder="مثال: ندوة فكرية، حفل جوائز، بودكاست ويكي، لقاء استراتيجي...">
+            <div class="form-group flex-1">
+                <label for="campaign" class="cdx-label">{{ _('athar-form-campaign-label') }}</label>
+                <input type="text" id="campaign" name="campaign" list="campaigns-list" class="cdx-text-input"
+                    value="{{ val_campaign }}"
+                    placeholder="{{ _('athar-form-campaign-placeholder') }}"
+                    autocomplete="off">
+                <datalist id="campaigns-list">
+                    {% for camp in preset_campaigns %}
+                        <option value="{{ camp }}">
+                    {% endfor %}
+                </datalist>
+            </div>
         </div>
 
         <!-- Activity Dates & Status -->
-        <div class="form-row" style="margin-bottom: 1.25rem;">
+        <div class="form-row">
             <div class="form-group flex-1">
-                <label for="start_date" class="cdx-label">تاريخ البدء</label>
-                <input type="date" id="start_date" name="start_date" class="cdx-text-input"
-                       value="{{ project.start_date.strftime('%Y-%m-%d') if project and project.start_date else '' }}"
-                       onchange="updateCalculatedStatus()" oninput="updateCalculatedStatus()">
-                <div style="font-size: 0.8rem; color: #54595d; margin-top: 4px;">
-                    تاريخ بداية الورشة أو الفعالية
-                </div>
+                <label for="start_date" class="cdx-label">{{ _('athar-field-start-date') }} *</label>
+                <input type="date" id="start_date" name="start_date" class="cdx-text-input" required
+                    value="{{ val_start_date }}"
+                    onchange="syncStatusFromDates()">
             </div>
-
             <div class="form-group flex-1">
-                <label for="end_date" class="cdx-label">تاريخ الانتهاء</label>
-                <input type="date" id="end_date" name="end_date" class="cdx-text-input"
-                       value="{{ project.end_date.strftime('%Y-%m-%d') if project and project.end_date else '' }}"
-                       onchange="updateCalculatedStatus()" oninput="updateCalculatedStatus()">
-                <div style="font-size: 0.8rem; color: #54595d; margin-top: 4px;">
-                    تاريخ ختام النشاط (اختياري)
-                </div>
+                <label for="end_date" class="cdx-label">{{ _('athar-field-end-date') }} *</label>
+                <input type="date" id="end_date" name="end_date" class="cdx-text-input" required
+                    value="{{ val_end_date }}"
+                    onchange="syncStatusFromDates()">
             </div>
-
             <div class="form-group flex-1">
-                <label for="status" class="cdx-label">حالة النشاط</label>
-                <select id="status" name="status" class="cdx-select" onchange="onManualStatusChange(this.value)">
-                    <option value="auto" {% if not project or not project.status %}selected{% endif %}>تحديد تلقائي بحسب التواريخ</option>
-                    <option value="In Progress" {% if project and project.status == 'In Progress' %}selected{% endif %}>جارية</option>
-                    <option value="Planned" {% if project and project.status == 'Planned' %}selected{% endif %}>مخططة</option>
-                    <option value="Completed" {% if project and project.status == 'Completed' %}selected{% endif %}>مكتملة</option>
+                <label for="status" class="cdx-label">{{ _('athar-field-status') }}</label>
+                <select id="status" name="status" class="cdx-select" onchange="handleStatusManualChange(this.value)">
+                    <option value="Planned" {% if val_status == 'Planned' %}selected{% endif %}>{{ _('athar-status-planned') }}</option>
+                    <option value="In Progress" {% if not val_status or val_status == 'In Progress' %}selected{% endif %}>{{ _('athar-status-in-progress') }}</option>
+                    <option value="Completed" {% if val_status == 'Completed' %}selected{% endif %}>{{ _('athar-status-completed') }}</option>
+                    <option value="Canceled" {% if val_status in ('Canceled', 'Cancelled') %}selected{% endif %}>{{ _('athar-status-canceled') }}</option>
                 </select>
-                <div id="status-live-container" style="margin-top: 6px; font-size: 0.85rem; display: flex; align-items: center; gap: 6px;">
-                    <span style="color: #54595d;">الحالة المحددة:</span>
-                    <span id="status-live-badge" class="project-status project-status--in-progress">جارية</span>
-                </div>
             </div>
         </div>
 
+        <div class="form-group form-group--description">
+            <label for="description" class="cdx-label">{{ _('athar-form-description-label') }}</label>
+            <textarea id="description" name="description" rows="4" required class="cdx-textarea"
+                placeholder="{{ _('athar-form-description-placeholder') }}">{{ val_description }}</textarea>
+        </div>
+
+        <!-- Compact Multilingual Activity Translations (directly under translatable fields) -->
+        <div class="translation-panel-compact" id="translation-panel-root" data-translate-url="{{ url_for('web.translate_project_fields') }}">
+            <div id="translation-cards-list" class="translation-cards-list"></div>
+
+            <div class="translation-add-wrap" id="translation-add-wrap">
+                <button type="button" id="open-lang-picker-btn" class="cdx-button cdx-button--quiet translation-add-trigger">
+                    {{ _('athar-form-add-language') }}
+                </button>
+
+                <div id="translation-lang-picker-row" class="translation-picker-row" hidden>
+                    <div class="lang-combobox lang-combobox--target">
+                        <input type="text" id="target-lang-filter" class="cdx-text-input lang-combobox-input"
+                            placeholder="{{ _('athar-form-lang-filter-placeholder') }}"
+                            autocomplete="off" aria-autocomplete="list">
+                        <div class="lang-combobox-menu" id="target-lang-menu" hidden></div>
+                    </div>
+                    <button type="button" id="cancel-lang-picker-btn" class="cdx-button cdx-button--quiet">
+                        {{ _('athar-form-cancel') }}
+                    </button>
+                </div>
+            </div>
+
+            <input type="hidden" id="translations_json" name="translations_json" value="{{ val_translations_json }}">
+        </div>
+
+        <!-- Topic Tags Chip Input -->
         <div class="form-group">
-            <label for="description" class="cdx-label">تفاصيل النشاط </label>
-            <textarea id="description" name="description" rows="5" required class="cdx-textarea"
-                placeholder="اذكر أهداف الورشة، النتائج المتوقعة، والروابط ذات الصلة...">{{ project.description if project else '' }}</textarea>
+            <label for="tags_input" class="cdx-label">{{ _('athar-form-tags-label') }}</label>
+            <div class="cdx-chip-input-container" id="tags_container">
+                <div class="cdx-chips-list" id="tags_chips" style="display: contents;"></div>
+                <input type="text" class="cdx-chip-inline-input" id="tags_input" placeholder="{{ _('athar-form-tags-placeholder') }}">
+            </div>
+            <input type="hidden" id="tags" name="tags" value="{{ val_tags }}">
+            <div class="cdx-chip-feedback" id="tags_feedback"></div>
         </div>
 
         <div class="form-group">
-            <label class="cdx-label">منظمون مشاركون</label>
+            <label for="co_orgs_input" class="cdx-label">{{ _('athar-field-co-organizers') }}</label>
             <div class="cdx-chip-input-container" id="co_orgs_container">
                 <div class="cdx-chips-list" id="co_orgs_chips" style="display: contents;"></div>
-                <input type="text" class="cdx-chip-inline-input" id="co_orgs_input" placeholder="اسم المستخدم في ويكيميديا واضغط Enter للإضافة...">
+                <input type="text" class="cdx-chip-inline-input" id="co_orgs_input" placeholder="{{ _('athar-form-username-chip-placeholder') }}">
             </div>
-            <input type="hidden" id="co_organizers" name="co_organizers"
-                value="{{ (project.co_organizers|join(',')) if project and project.co_organizers else '' }}">
-            <div style="font-size: 0.8rem; color: #54595d; margin-top: 4px;">
-                أدخل اسم مستخدم ويكيميديا واضغط Enter للإضافة (يتم التحقق من الحساب تلقائياً).
-            </div>
+            <input type="hidden" id="co_organizers" name="co_organizers" value="{{ val_co_orgs }}">
             <div class="cdx-chip-feedback" id="co_orgs_feedback"></div>
         </div>
 
         <div class="form-checkbox-group">
-            <input type="checkbox" id="is_contest" name="is_contest" value="1" {% if project and project.is_contest
-                %}checked{% endif %} onchange="toggleJuryField()">
-            <label for="is_contest">هذا النشاط عبارة عن مسابقة أو منافسة (تتطلب لجنة تحكيم)</label>
+            <input type="checkbox" id="is_contest" name="is_contest" value="1" {% if val_is_contest %}checked{% endif %} onchange="toggleJuryField()">
+            <label for="is_contest">{{ _('athar-form-is-contest') }}</label>
         </div>
 
-        <div class="form-group" id="jury-group"
-            style="display: {% if project and project.is_contest %}block{% else %}none{% endif %};">
-            <label class="cdx-label">أعضاء لجنة التحكيم</label>
+        <div class="form-group" id="jury-group" style="display: {% if val_is_contest %}block{% else %}none{% endif %};">
+            <label for="jury_input" class="cdx-label">{{ _('athar-field-jury') }}</label>
             <div class="cdx-chip-input-container" id="jury_container">
                 <div class="cdx-chips-list" id="jury_chips" style="display: contents;"></div>
-                <input type="text" class="cdx-chip-inline-input" id="jury_input" placeholder="اسم المستخدم في ويكيميديا واضغط Enter للإضافة...">
+                <input type="text" class="cdx-chip-inline-input" id="jury_input" placeholder="{{ _('athar-form-username-chip-placeholder') }}">
             </div>
-            <input type="hidden" id="jury_members" name="jury_members"
-                value="{{ (project.jury_members|join(',')) if project and project.jury_members else '' }}">
-            <div style="font-size: 0.8rem; color: #54595d; margin-top: 4px;">
-                أدخل اسم مستخدم ويكيميديا واضغط Enter للإضافة (يتم التحقق من الحساب تلقائياً).
-            </div>
+            <input type="hidden" id="jury_members" name="jury_members" value="{{ val_jury }}">
             <div class="cdx-chip-feedback" id="jury_feedback"></div>
         </div>
 
         <!-- Participants List -->
         <div class="form-group" style="margin-top: 1rem;">
-            <label for="participants" class="cdx-label">قائمة المشاركين في النشاط (اختياري)</label>
-            <textarea id="participants" name="participants" rows="4" class="cdx-textarea"
-                placeholder="أدخل أسماء المشاركين (اسم مستخدم في كل سطر أو مفصولة بفواصل)...">{{ (project.participants|join('\n')) if project and project.participants else '' }}</textarea>
-            <div style="font-size: 0.8rem; color: #54595d; margin-top: 4px;">
-                أدخل أسماء المشاركين (اسم مستخدم في كل سطر أو مفصولة بفواصل).
-            </div>
+            <label for="participants" class="cdx-label">{{ _('athar-form-participants-label') }}</label>
+            <textarea id="participants" name="participants" rows="3" class="cdx-textarea"
+                placeholder="{{ _('athar-form-participants-placeholder') }}">{{ val_participants }}</textarea>
         </div>
 
         <!-- Competition Results & Outcomes -->
         <div class="form-checkbox-group" style="margin-top: 1rem;">
-            <input type="checkbox" id="toggle_results" name="toggle_results" value="1"
-                {% if project and project.results %}checked{% endif %} onchange="toggleResultsSection()">
-            <label for="toggle_results">تسجيل نتائج ومخرجات النشاط / الفائزين (اختياري)</label>
+            <input type="checkbox" id="toggle_results" name="toggle_results" value="1" {% if has_results %}checked{% endif %} onchange="toggleResultsSection()">
+            <label for="toggle_results">{{ _('athar-form-toggle-results') }}</label>
         </div>
 
-        <div id="results-group" style="display: {% if project and project.results %}block{% else %}none{% endif %}; background: #f8f9fa; border: 1px solid #c8ccd1; border-radius: 8px; padding: 1.25rem; margin-bottom: 1.5rem;">
-            <h4 style="margin-top: 0; margin-bottom: 1rem; color: #202122; font-size: 1rem;">🏆 مخرجات ونتائج النشاط</h4>
-            
+        <div id="results-group" class="results-subcard" style="display: {% if has_results %}block{% else %}none{% endif %};">
+            <h3 style="margin-top: 0; margin-bottom: 1rem; font-size: 1rem;">{{ _('athar-detail-results-heading') }}</h3>
+
             <div class="form-group">
-                <label for="results_summary" class="cdx-label">ملخص النتائج</label>
+                <label for="results_summary" class="cdx-label">{{ _('athar-form-results-summary-label') }}</label>
                 <textarea id="results_summary" name="results_summary" rows="2" class="cdx-textarea"
-                    placeholder="ملخص عام لأبرز مخرجات ونتائج المسابقة أو الورشة...">{{ (project.results.summary if project and project.results and project.results.summary else '') }}</textarea>
+                    placeholder="{{ _('athar-form-results-summary-placeholder') }}">{{ val_res_summary }}</textarea>
             </div>
 
             <div class="form-group">
-                <label for="results_winners" class="cdx-label">الفائزون في المسابقة</label>
+                <label for="results_winners" class="cdx-label">{{ _('athar-detail-winners-heading') }}</label>
                 <textarea id="results_winners" name="results_winners" rows="3" class="cdx-textarea"
-                    placeholder="أسماء الفائزين مرتبين حسب المراتب (اسم مستخدم في كل سطر أو مفصول بفواصل)...">{{ (project.results.winners|join('\n')) if project and project.results and project.results.winners else '' }}</textarea>
-                <div style="font-size: 0.8rem; color: #54595d; margin-top: 4px;">
-                    أدخل أسماء حسابات الفائزين بالترتيب (سطر لكل فائز).
-                </div>
+                    placeholder="{{ _('athar-form-results-winners-placeholder') }}">{{ val_res_winners }}</textarea>
             </div>
 
-            <div class="form-row" style="display: flex; gap: 1rem; flex-wrap: wrap;">
+            <div class="form-row" style="display: flex; gap: 1rem; flex-wrap: wrap; align-items: flex-end;">
                 <div class="form-group flex-1" style="min-width: 140px;">
-                    <label for="results_articles_created" class="cdx-label">مقالات أُنشئت</label>
+                    <label for="results_articles_created" class="cdx-label">{{ _('athar-detail-metric-created') }}</label>
                     <input type="number" id="results_articles_created" name="results_articles_created" min="0" class="cdx-text-input"
-                        value="{{ (project.results.metrics.articles_created if project and project.results and project.results.metrics else '') }}">
+                        value="{{ val_res_created }}">
                 </div>
                 <div class="form-group flex-1" style="min-width: 140px;">
-                    <label for="results_articles_improved" class="cdx-label">مقالات طُوّرت</label>
+                    <label for="results_articles_improved" class="cdx-label">{{ _('athar-detail-metric-improved') }}</label>
                     <input type="number" id="results_articles_improved" name="results_articles_improved" min="0" class="cdx-text-input"
-                        value="{{ (project.results.metrics.articles_improved if project and project.results and project.results.metrics else '') }}">
+                        value="{{ val_res_improved }}">
                 </div>
                 <div class="form-group flex-1" style="min-width: 140px;">
-                    <label for="results_files_uploaded" class="cdx-label">ملفات رُفعت (كومنز)</label>
+                    <label for="results_files_uploaded" class="cdx-label">{{ _('athar-detail-metric-uploaded') }}</label>
                     <input type="number" id="results_files_uploaded" name="results_files_uploaded" min="0" class="cdx-text-input"
-                        value="{{ (project.results.metrics.files_uploaded if project and project.results and project.results.metrics else '') }}">
+                        value="{{ val_res_uploaded }}">
                 </div>
             </div>
 
             <div class="form-group" style="margin-top: 0.5rem; margin-bottom: 0;">
-                <label for="results_notes" class="cdx-label">ملاحظات لجنة التحكيم أو المنظمين</label>
+                <label for="results_notes" class="cdx-label">{{ _('athar-form-results-notes-label') }}</label>
                 <textarea id="results_notes" name="results_notes" rows="2" class="cdx-textarea"
-                    placeholder="أي ملاحظات ختامية أو توصيات...">{{ (project.results.notes if project and project.results and project.results.notes else '') }}</textarea>
+                    placeholder="{{ _('athar-form-results-notes-placeholder') }}">{{ val_res_notes }}</textarea>
+            </div>
+
+            <!-- Compact Multilingual Results Translations -->
+            <div class="translation-panel-compact translation-panel-compact--results" id="results-translation-panel-root" data-translate-url="{{ url_for('web.translate_project_fields') }}">
+                <div id="results-translation-cards-list" class="translation-cards-list"></div>
+
+                <div class="translation-add-wrap" id="results-translation-add-wrap">
+                    <button type="button" id="open-results-lang-picker-btn" class="cdx-button cdx-button--quiet translation-add-trigger">
+                        {{ _('athar-form-add-language') }}
+                    </button>
+
+                    <div id="results-lang-picker-row" class="translation-picker-row" hidden>
+                        <div class="lang-combobox lang-combobox--target">
+                            <input type="text" id="results-target-lang-filter" class="cdx-text-input lang-combobox-input"
+                                placeholder="{{ _('athar-form-lang-filter-placeholder') }}"
+                                autocomplete="off" aria-autocomplete="list">
+                            <div class="lang-combobox-menu" id="results-target-lang-menu" hidden></div>
+                        </div>
+                        <button type="button" id="cancel-results-lang-picker-btn" class="cdx-button cdx-button--quiet">
+                            {{ _('athar-form-cancel') }}
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
 
         <button type="submit" class="cdx-button cdx-button--action cdx-button--weight-primary">
-            {% if project %}حفظ التعديلات{% else %}نشر النشاط المجتمعي{% endif %}
+            {{ _('athar-btn-save-changes') if project else _('athar-btn-publish-activity') }}
         </button>
     </form>
 </div>
 {% endblock %}
 
 {% block scripts %}
+<script src="{{ url_for('static', filename='js/chip-input.js') }}" defer></script>
+<script src="{{ url_for('static', filename='js/wikimedia-languages.js') }}" defer></script>
+<script src="{{ url_for('static', filename='js/translation-panel.js') }}" defer></script>
 <script>
+    const trMsg = (key, fallback) => (window._t ? window._t(key) : fallback);
+
     function syncStatusFromDates() {
         const startInput = document.getElementById('start_date');
         const endInput = document.getElementById('end_date');
@@ -288,7 +341,7 @@
         if (!startDateStr || !endDateStr) return;
 
         if (endDateStr < startDateStr) {
-            endInput.setCustomValidity('تاريخ انتهاء النشاط لا يمكن أن يكون قبل تاريخ البدء');
+            endInput.setCustomValidity(trMsg('athar-form-dates-inverted-msg', 'End date cannot be earlier than start date'));
         } else {
             endInput.setCustomValidity('');
         }
@@ -303,35 +356,18 @@
             targetStatus = 'Planned';
         } else if (todayStr > endDateStr) {
             targetStatus = 'Completed';
-        } else {
-            targetStatus = 'In Progress';
         }
 
-        const optPlanned = statusSelect.querySelector('option[value="Planned"]');
-        const optInProgress = statusSelect.querySelector('option[value="In Progress"]');
-        const optCompleted = statusSelect.querySelector('option[value="Completed"]');
-        const optCanceled = statusSelect.querySelector('option[value="Canceled"]');
-
-        if (optPlanned) optPlanned.disabled = (targetStatus !== 'Planned');
-        if (optInProgress) optInProgress.disabled = (targetStatus !== 'In Progress');
-        if (optCompleted) optCompleted.disabled = (targetStatus !== 'Completed');
-        if (optCanceled) optCanceled.disabled = false;
-
-        // Auto-select calculated status unless user chose Canceled
-        if (statusSelect.value !== 'Canceled') {
+        if (statusSelect.value !== 'Canceled' && statusSelect.value !== 'Cancelled') {
             statusSelect.value = targetStatus;
         }
     }
 
     function handleStatusManualChange(val) {
-        if (val !== 'Canceled') {
+        if (val !== 'Canceled' && val !== 'Cancelled') {
             syncStatusFromDates();
         }
     }
-
-    document.addEventListener('DOMContentLoaded', function () {
-        syncStatusFromDates();
-    });
 
     function toggleResultsSection() {
         const isChecked = document.getElementById('toggle_results').checked;
@@ -382,6 +418,13 @@
         'ويكي بيانات': 'https://www.wikidata.org'
     };
 
+    const ALLOWED_LINK_SUFFIXES = [
+        'wikipedia.org', 'wikimedia.org', 'wikidata.org', 'wikisource.org',
+        'wiktionary.org', 'wikibooks.org', 'wikiquote.org', 'wikivoyage.org',
+        'wikinews.org', 'wikiversity.org', 'mediawiki.org', 'wikifunctions.org',
+        'wmcloud.org', 'wmflabs.org', 'toolforge.org'
+    ];
+
     function resolveWikiPreview(input) {
         if (!input) return '';
         const clean = input.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/$/, '');
@@ -402,250 +445,101 @@
         const preview = document.getElementById('target_wiki_preview');
         if (!preview) return;
         const url = resolveWikiPreview(val);
-        if (url) {
-            preview.style.color = '#15803d';
-            preview.innerHTML = `الرابط المعتمد: <a href="${url}" target="_blank" rel="noopener" style="color: #36c; text-decoration: underline;">${url}</a>`;
-        } else if (val && val.trim()) {
-            preview.style.color = '#b91c1c';
-            preview.textContent = 'تنبيه: أدخل رمز مشروع ويكيميديا صالح مثل arwiki أو commons أو wikidata.';
+        preview.textContent = '';
+        if (!url && val && val.trim()) {
+            preview.className = 'wiki-preview-msg wiki-preview--invalid';
+            preview.textContent = trMsg('athar-form-target-wiki-invalid', 'Unsupported project code (try arwiki, commons, or wikidata).');
         } else {
+            preview.className = 'wiki-preview-msg';
+        }
+    }
+
+    function isSupportedExternalUrl(rawVal) {
+        const trimmed = (rawVal || '').trim();
+        if (!trimmed) return true;
+        let candidate = trimmed;
+        if (!/^[a-zA-Z][a-zA-Z\d+\-.]*:/.test(candidate)) {
+            candidate = 'https://' + candidate;
+        }
+        try {
+            const parsed = new URL(candidate);
+            if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return false;
+            const host = (parsed.hostname || '').toLowerCase();
+            return ALLOWED_LINK_SUFFIXES.some((sfx) => host === sfx || host.endsWith('.' + sfx));
+        } catch (err) {
+            return false;
+        }
+    }
+
+    function validateWikiLinkInput(val) {
+        const preview = document.getElementById('wiki_link_preview');
+        if (!preview) return;
+        if (val && val.trim() && !isSupportedExternalUrl(val)) {
+            preview.className = 'wiki-preview-msg wiki-preview--invalid';
+            preview.textContent = trMsg(
+                'athar-form-wiki-link-invalid',
+                'Unsupported URL. Use a Wikimedia, wmcloud.org, wmflabs.org, or toolforge.org link.'
+            );
+        } else {
+            preview.className = 'wiki-preview-msg';
             preview.textContent = '';
         }
     }
 
-    function setupChipInput(config) {
-        const container = document.getElementById(config.containerId);
-        const chipsList = document.getElementById(config.chipsId);
-        const input = document.getElementById(config.inputId);
-        const hidden = document.getElementById(config.hiddenId);
-        const feedback = document.getElementById(config.feedbackId);
-
-        if (!container || !chipsList || !input || !hidden) return;
-
-        let items = [];
-
-        if (hidden.value && hidden.value.trim()) {
-            items = hidden.value.split(',')
-                .map(s => s.trim())
-                .filter(Boolean);
-            render();
-        }
-
-        function sync() {
-            hidden.value = items.join(',');
-        }
-
-        function render() {
-            chipsList.innerHTML = '';
-            items.forEach((name, index) => {
-                const chip = document.createElement('span');
-                chip.className = 'cdx-chip';
-                chip.textContent = name;
-
-                const removeBtn = document.createElement('button');
-                removeBtn.type = 'button';
-                removeBtn.className = 'cdx-chip-remove';
-                removeBtn.innerHTML = '&times;';
-                removeBtn.setAttribute('aria-label', 'حذف ' + name);
-                removeBtn.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    items.splice(index, 1);
-                    render();
-                    setFeedback('', '');
-                    input.focus();
-                });
-
-                chip.appendChild(removeBtn);
-                chipsList.appendChild(chip);
-            });
-            sync();
-        }
-
-        function setFeedback(msg, type) {
-            if (!feedback) return;
-            feedback.textContent = msg;
-            feedback.className = 'cdx-chip-feedback ' + (type ? 'is-' + type : '');
-            if (type === 'error') {
-                container.classList.add('is-error');
-            } else {
-                container.classList.remove('is-error');
-            }
-        }
-
-        container.addEventListener('click', (e) => {
-            if (e.target !== input && !e.target.classList.contains('cdx-chip-remove')) {
-                input.focus();
-            }
-        });
-
-        input.addEventListener('focus', () => container.classList.add('is-focused'));
-        input.addEventListener('blur', () => container.classList.remove('is-focused'));
-        input.addEventListener('input', () => {
-            if (container.classList.contains('is-error')) {
-                container.classList.remove('is-error');
-                if (feedback && feedback.classList.contains('is-error')) {
-                    feedback.textContent = '';
-                }
-            }
-        });
-
-        let isChecking = false;
-
-        async function verifyAndAdd(rawName) {
-            const username = rawName.trim().replace(/^,+|,+$/g, '');
-            if (!username) return;
-
-            const alreadyExists = items.some(x => x.toLowerCase() === username.toLowerCase());
-            if (alreadyExists) {
-                setFeedback(`المستخدم "${username}" مضاف مسبقاً في القائمة.`, 'error');
-                return;
-            }
-
-            isChecking = true;
-            setFeedback(`جاري التحقق من حساب "${username}" في ويكيميديا...`, 'loading');
-
-            try {
-                const resp = await fetch(`/api/check-user?username=${encodeURIComponent(username)}`);
-                const data = await resp.json();
-                if (data.exists) {
-                    const canonicalName = data.username || username;
-                    items.push(canonicalName);
-                    render();
-                    input.value = '';
-                    setFeedback(`تم التحقق من الحساب "${canonicalName}" وإضافته بنجاح.`, 'success');
-                    setTimeout(() => {
-                        if (feedback && feedback.classList.contains('is-success')) {
-                            setFeedback('', '');
-                        }
-                    }, 2500);
-                } else {
-                    setFeedback(`المستخدم "${username}" غير مسجل في ويكيميديا. يرجى التأكد من كتابة الاسم بدقة.`, 'error');
-                }
-            } catch (e) {
-                setFeedback('تعذر التحقق من الحساب حالياً، يرجى المحاولة لاحقاً.', 'error');
-            } finally {
-                isChecking = false;
-            }
-        }
-
-        input.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' || e.key === ',') {
-                e.preventDefault();
-                if (!isChecking) {
-                    verifyAndAdd(input.value);
-                }
-            } else if (e.key === 'Backspace' && input.value === '' && items.length > 0) {
-                items.pop();
-                render();
-                setFeedback('', '');
-            }
-        });
-
-        input.addEventListener('paste', (e) => {
-            const pasteData = (e.clipboardData || window.clipboardData).getData('text');
-            if (pasteData && pasteData.includes(',')) {
-                e.preventDefault();
-                const parts = pasteData.split(',').map(s => s.trim()).filter(Boolean);
-                parts.forEach(part => verifyAndAdd(part));
-            }
-        });
-    }
-
-    function getCalculatedStatus(startDateStr, endDateStr) {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-
-        let start = null;
-        let end = null;
-        if (startDateStr) {
-            const parts = startDateStr.split('-');
-            if (parts.length === 3) {
-                start = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
-                start.setHours(0, 0, 0, 0);
-            }
-        }
-        if (endDateStr) {
-            const parts = endDateStr.split('-');
-            if (parts.length === 3) {
-                end = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
-                end.setHours(0, 0, 0, 0);
-            }
-        }
-
-        if (end && end < today) {
-            return "Completed";
-        }
-        if (start && start > today) {
-            return "Planned";
-        }
-        if (start && start <= today) {
-            if (end && end < today) {
-                return "Completed";
-            }
-            return "In Progress";
-        }
-        if (end && end >= today) {
-            return "In Progress";
-        }
-
-        return "In Progress";
-    }
-
-    function updateCalculatedStatus() {
-        const startVal = document.getElementById('start_date')?.value || '';
-        const endVal = document.getElementById('end_date')?.value || '';
-        const statusSelect = document.getElementById('status');
-        const badge = document.getElementById('status-live-badge');
-
-        const calculated = getCalculatedStatus(startVal, endVal);
-
-        let currentStatus = calculated;
-        if (statusSelect && statusSelect.value !== 'auto') {
-            currentStatus = statusSelect.value;
-        }
-
-        if (badge) {
-            const labels = {
-                'In Progress': 'جارية',
-                'Planned': 'مخططة',
-                'Completed': 'مكتملة'
-            };
-            const classNames = {
-                'In Progress': 'project-status project-status--in-progress',
-                'Planned': 'project-status project-status--planned',
-                'Completed': 'project-status project-status--completed'
-            };
-
-            badge.textContent = labels[currentStatus] || currentStatus;
-            badge.className = classNames[currentStatus] || 'project-status';
-        }
-    }
-
-    function onManualStatusChange(val) {
-        updateCalculatedStatus();
-    }
-
     document.addEventListener('DOMContentLoaded', () => {
-        const input = document.getElementById('target_wiki');
-        if (input && input.value) previewWikiLink(input.value);
+        const wikiInput = document.getElementById('target_wiki');
+        if (wikiInput && wikiInput.value) previewWikiLink(wikiInput.value);
 
-        updateCalculatedStatus();
+        const extLinkInput = document.getElementById('wiki_link');
+        if (extLinkInput && extLinkInput.value) validateWikiLinkInput(extLinkInput.value);
 
-        setupChipInput({
-            containerId: 'co_orgs_container',
-            chipsId: 'co_orgs_chips',
-            inputId: 'co_orgs_input',
-            hiddenId: 'co_organizers',
-            feedbackId: 'co_orgs_feedback'
-        });
+        syncStatusFromDates();
 
-        setupChipInput({
-            containerId: 'jury_container',
-            chipsId: 'jury_chips',
-            inputId: 'jury_input',
-            hiddenId: 'jury_members',
-            feedbackId: 'jury_feedback'
-        });
+        if (window.AtharChipInput) {
+            window.AtharChipInput.setup({
+                mode: 'tag',
+                containerId: 'tags_container',
+                chipsId: 'tags_chips',
+                inputId: 'tags_input',
+                hiddenId: 'tags',
+                feedbackId: 'tags_feedback',
+                maxItems: 20
+            });
+            window.AtharChipInput.setup({
+                mode: 'wikimedia_user',
+                containerId: 'co_orgs_container',
+                chipsId: 'co_orgs_chips',
+                inputId: 'co_orgs_input',
+                hiddenId: 'co_organizers',
+                feedbackId: 'co_orgs_feedback'
+            });
+            window.AtharChipInput.setup({
+                mode: 'wikimedia_user',
+                containerId: 'jury_container',
+                chipsId: 'jury_chips',
+                inputId: 'jury_input',
+                hiddenId: 'jury_members',
+                feedbackId: 'jury_feedback'
+            });
+        }
+
+        const form = document.getElementById('project-activity-form');
+        let flushed = false;
+        if (form) {
+            form.addEventListener('submit', async (e) => {
+                if (window.AtharTranslationPanel) {
+                    window.AtharTranslationPanel.syncToHidden();
+                }
+                if (flushed || !window.AtharChipInput) return;
+                e.preventDefault();
+                await window.AtharChipInput.flushAll();
+                if (window.AtharTranslationPanel) {
+                    window.AtharTranslationPanel.syncToHidden();
+                }
+                flushed = true;
+                form.submit();
+            });
+        }
     });
 </script>
 {% endblock %}

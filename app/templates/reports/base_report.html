@@ -1,11 +1,10 @@
 <!DOCTYPE html>
-<html lang="ar" dir="rtl">
+<html lang="{{ report_lang or 'ar' }}" dir="{{ report_dir or 'rtl' }}" data-theme="light">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}تقرير أثر — تقرير الأنشطة والمساهمات{% endblock %}</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+    <title>{% block title %}{{ _r('athar-report-doc-title', lang=report_lang) }}{% endblock %}</title>
     <style>
         body {
             background-color: #f8f9fa;
@@ -51,7 +50,7 @@
         .report-meta-timestamp {
             font-size: 0.85rem;
             color: #72777d;
-            text-align: left;
+            text-align: end;
         }
 
         .report-action-bar {
@@ -63,6 +62,32 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+
+        .report-lang-pills {
+            display: inline-flex;
+            gap: 0.4rem;
+            align-items: center;
+        }
+
+        .report-lang-pill {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 6px;
+            border: 1px solid #a2c8f8;
+            background: #ffffff;
+            color: #36c;
+            text-decoration: none;
+            font-size: 0.82rem;
+            font-weight: 600;
+        }
+
+        .report-lang-pill.is-active {
+            background: #36c;
+            color: #ffffff;
+            border-color: #36c;
         }
 
         .report-card,
@@ -83,7 +108,7 @@
         .report-table td {
             border: 1px solid #c8ccd1;
             padding: 8px 12px;
-            text-align: right;
+            text-align: start;
         }
 
         .report-table th {
@@ -205,17 +230,24 @@
     <div style="max-width: 900px; margin: 1.5rem auto 0 auto;" class="no-print">
         <div class="report-action-bar">
             <div>
-                <strong>تقرير جاهز للطباعة / التصدير</strong>
-                <div style="font-size: 0.85rem; color: #54595d;">يمكنك استخدام خيار الطباعة في متصفحك لحفظ هذا التقرير
-                    كملف PDF عالي الجودة.</div>
+                <strong>{{ _r('athar-report-ready-banner', lang=report_lang) }}</strong>
+                <div style="font-size: 0.85rem; color: #54595d;">{{ _r('athar-report-ready-hint', lang=report_lang) }}</div>
             </div>
-            <div style="display: flex; gap: 0.75rem;">
+            <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
+                {% if report_locales %}
+                <div class="report-lang-pills">
+                    {% for code in report_locales %}
+                        <a href="?lang={{ code }}{% for k, v in request.args.items() if k != 'lang' %}&{{ k|urlencode }}={{ v|urlencode }}{% endfor %}"
+                           class="report-lang-pill {% if report_lang == code %}is-active{% endif %}">{{ code|upper }}</a>
+                    {% endfor %}
+                </div>
+                {% endif %}
                 <button onclick="window.print()" class="cdx-button cdx-button--action cdx-button--weight-primary"
                     style="cursor: pointer; padding: 8px 16px; font-weight: 600;">
-                    🖨️ طباعة / حفظ كملف PDF
+                    {{ _r('athar-report-print-btn', lang=report_lang) }}
                 </button>
                 <button onclick="window.close()" class="cdx-button" style="cursor: pointer; padding: 8px 16px;">
-                    إغلاق
+                    {{ _r('athar-report-close-btn', lang=report_lang) }}
                 </button>
             </div>
         </div>
@@ -225,10 +257,10 @@
         <header class="report-header">
             <div>
                 <h1 class="report-brand">أثَر | Athar</h1>
-                <p class="report-subtitle">منصة تتبع ومتابعة أنشطة مجتمعات ويكيميديا الإقليمية</p>
+                <p class="report-subtitle">{{ _r('athar-report-brand-subtitle', lang=report_lang) }}</p>
             </div>
             <div class="report-meta-timestamp">
-                <div><strong>تاريخ التوليد:</strong></div>
+                <div><strong>{{ _r('athar-report-generated-at', lang=report_lang) }}</strong></div>
                 <div>{{ generated_at.strftime('%Y-%m-%d %H:%M UTC') if generated_at else '' }}</div>
             </div>
         </header>

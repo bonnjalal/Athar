@@ -1,6 +1,6 @@
 {% extends "reports/base_report.html" %}
 
-{% block title %}تقرير النشاط: {{ project.title }} — أثر{% endblock %}
+{% block title %}{{ _r('athar-report-single-project-title', project.localized_text('title', report_lang), lang=report_lang) }} — {{ _('athar-brand-name', lang=report_lang) }}{% endblock %}
 
 {% block report_body %}
 <div class="report-section">
@@ -8,71 +8,90 @@
         <div>
             <span
                 style="display: inline-block; background: #eaf3ff; color: #36c; font-weight: 600; font-size: 0.85rem; padding: 2px 8px; border-radius: 4px; margin-bottom: 6px;">
-                {{ project.project_type }}
+                {{ project.t_type(report_lang) }}
             </span>
             <span
-                style="display: inline-block; background: #f0f3f6; color: #202122; font-weight: 500; font-size: 0.85rem; padding: 2px 8px; border-radius: 4px; margin-bottom: 6px; margin-right: 6px;">
-                الحالة: {{ project.status }}
+                style="display: inline-block; background: #f0f3f6; color: #202122; font-weight: 500; font-size: 0.85rem; padding: 2px 8px; border-radius: 4px; margin-bottom: 6px; margin-inline-start: 6px;">
+                {{ _r('athar-report-status-prefix', project.t_status(report_lang), lang=report_lang) }}
             </span>
             {% if project.is_contest %}
             <span
-                style="display: inline-block; background: #fdfaf2; color: #b7791f; font-weight: 600; font-size: 0.85rem; padding: 2px 8px; border-radius: 4px; margin-bottom: 6px; margin-right: 6px;">
-                مسابقة ومنافسة
+                style="display: inline-block; background: #fdfaf2; color: #b7791f; font-weight: 600; font-size: 0.85rem; padding: 2px 8px; border-radius: 4px; margin-bottom: 6px; margin-inline-start: 6px;">
+                {{ _('athar-detail-contest-badge', lang=report_lang) }}
             </span>
             {% endif %}
-            <h2 style="margin: 0.25rem 0 0.5rem 0; font-size: 1.6rem; color: #202122;">{{ project.title }}</h2>
+            <h2 style="margin: 0.25rem 0 0.5rem 0; font-size: 1.6rem; color: #202122;">
+                <bdi lang="{{ project.localized_source_lang('title', report_lang) }}" dir="auto">{{ project.localized_text('title', report_lang) }}</bdi>
+            </h2>
         </div>
     </div>
 
     <!-- Metadata Table -->
     <table class="report-table" style="margin-bottom: 1.5rem;">
         <tr>
-            <th style="width: 25%;">المجتمع التابع له:</th>
-            <td style="width: 25%;">{{ community.name if community else 'عام' }}</td>
-            <th style="width: 25%;">المشروع المستهدف:</th>
+            <th style="width: 25%;">{{ _('athar-field-community', lang=report_lang) }}:</th>
+            <td style="width: 25%;">{{ community.name if community else _('athar-field-general', lang=report_lang) }}</td>
+            <th style="width: 25%;">{{ _('athar-field-target-wiki', lang=report_lang) }}:</th>
             <td style="width: 25%;">{{ project.target_wiki }}</td>
         </tr>
         <tr>
-            <th>المنظمون:</th>
-            <td colspan="3">{{ project.all_organizers|join('، ') if project.all_organizers else '—' }}</td>
+            <th>{{ _('athar-field-organizers', lang=report_lang) }}:</th>
+            <td colspan="3">{{ project.all_organizers|join(', ') if report_lang != 'ar' else (project.all_organizers|join('، ') if project.all_organizers else '—') }}{% if not project.all_organizers %}—{% endif %}</td>
         </tr>
         <tr>
-            <th>تاريخ البدء:</th>
-            <td>{{ project.start_date.strftime('%Y-%m-%d') if project.start_date else 'غير محدد' }}</td>
-            <th>تاريخ الانتهاء:</th>
-            <td>{{ project.end_date.strftime('%Y-%m-%d') if project.end_date else 'غير محدد' }}</td>
+            <th>{{ _('athar-field-start-date', lang=report_lang) }}:</th>
+            <td>{{ project.start_date.strftime('%Y-%m-%d') if project.start_date else _('athar-field-not-specified', lang=report_lang) }}</td>
+            <th>{{ _('athar-field-end-date', lang=report_lang) }}:</th>
+            <td>{{ project.end_date.strftime('%Y-%m-%d') if project.end_date else _('athar-field-not-specified', lang=report_lang) }}</td>
         </tr>
+        {% if project.campaign or project.wiki_link %}
+        <tr>
+            <th>{{ _('athar-field-campaign', lang=report_lang) }}:</th>
+            <td>{{ project.campaign or '—' }}</td>
+            <th>{{ _('athar-field-wiki-link', lang=report_lang) }}:</th>
+            <td>{% if project.wiki_link %}<a href="{{ project.wiki_link }}">{{ project.wiki_link }}</a>{% else %}—{% endif %}</td>
+        </tr>
+        {% endif %}
+        {% if project.tags %}
+        <tr>
+            <th>{{ _('athar-field-tags', lang=report_lang) }}:</th>
+            <td colspan="3">{{ project.tags|join(', ') }}</td>
+        </tr>
+        {% endif %}
         {% if project.is_contest and project.jury_members %}
         <tr>
-            <th>لجنة التحكيم:</th>
-            <td colspan="3">{{ project.jury_members|join('، ') }}</td>
+            <th>{{ _('athar-field-jury', lang=report_lang) }}:</th>
+            <td colspan="3">{{ project.jury_members|join(', ') }}</td>
         </tr>
         {% endif %}
     </table>
 
     <!-- Description -->
+    {% set loc_desc = project.localized_text('description', report_lang) %}
     <div class="report-card" style="margin-bottom: 1.5rem;">
-        <h3
-            style="margin-top: 0; font-size: 1.15rem; color: #202122; border-bottom: 1px solid #c8ccd1; padding-bottom: 6px;">
-            تفاصيل النشاط</h3>
+        <h3 style="margin-top: 0; font-size: 1.15rem; color: #202122; border-bottom: 1px solid #c8ccd1; padding-bottom: 6px;">
+            {{ _('athar-field-description', lang=report_lang) }}</h3>
         <div style="line-height: 1.8; color: #333;">
-            {{ project.description|safe if project.description else '<em>لا يوجد وصف متاح.</em>'|safe }}
+            {% if loc_desc %}
+                <bdi lang="{{ project.localized_source_lang('description', report_lang) }}" dir="auto">{{ loc_desc|safe }}</bdi>
+            {% else %}
+                <em>{{ _r('athar-report-no-description', lang=report_lang) }}</em>
+            {% endif %}
         </div>
     </div>
 
     <!-- Participants Roster -->
     {% if project.participants %}
     <div class="report-card" style="margin-bottom: 1.5rem;">
-        <h3
-            style="margin-top: 0; font-size: 1.15rem; color: #202122; border-bottom: 1px solid #c8ccd1; padding-bottom: 6px;">
-            قائمة المشاركين ({{ project.participants|length }})
+        <h3 style="margin-top: 0; font-size: 1.15rem; color: #202122; border-bottom: 1px solid #c8ccd1; padding-bottom: 6px;">
+            {{ _r('athar-report-registered-participants', project.participants|length, lang=report_lang) }}
         </h3>
         <table class="report-table">
             <thead>
                 <tr>
                     <th style="width: 50px; text-align: center;">#</th>
-                    <th>اسم المستخدم</th>
-                    <th>الدور</th>
+                    <th>{{ _('athar-users-col-username', lang=report_lang) }}</th>
+                    <th>{{ _r('athar-csv-l3-col-role', lang=report_lang) }}</th>
                 </tr>
             </thead>
             <tbody>
@@ -80,7 +99,7 @@
                 <tr>
                     <td style="text-align: center;">{{ loop.index }}</td>
                     <td style="font-weight: 600;">{{ part }}</td>
-                    <td>مشارك</td>
+                    <td>{{ _r('athar-report-role-participant', lang=report_lang) }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -90,15 +109,17 @@
 
     <!-- Competition Results & Outcomes -->
     {% if project.results %}
+    {% set loc_summary = project.localized_text('results_summary', report_lang) %}
+    {% set loc_notes = project.localized_text('results_notes', report_lang) %}
     <div class="report-card" style="margin-bottom: 1.5rem;">
-        <h3
-            style="margin-top: 0; font-size: 1.15rem; color: #202122; border-bottom: 1px solid #c8ccd1; padding-bottom: 6px;">
-            🏆 نتائج ومخرجات النشاط
+        <h3 style="margin-top: 0; font-size: 1.15rem; color: #202122; border-bottom: 1px solid #c8ccd1; padding-bottom: 6px;">
+            {{ _('athar-detail-results-heading', lang=report_lang) }}
         </h3>
 
-        {% if project.results.summary %}
+        {% if loc_summary %}
         <p style="margin-bottom: 1rem; color: #333; line-height: 1.6;">
-            <strong>الملخص التنفيذي:</strong> {{ project.results.summary }}
+            <strong>{{ _r('athar-report-exec-summary', lang=report_lang) }}</strong>
+            <bdi lang="{{ project.localized_source_lang('results_summary', report_lang) }}" dir="auto">{{ loc_summary }}</bdi>
         </p>
         {% endif %}
 
@@ -107,19 +128,19 @@
             {% if project.results.metrics.articles_created %}
             <div class="kpi-tile">
                 <div class="kpi-tile-val">{{ project.results.metrics.articles_created }}</div>
-                <div class="kpi-tile-lbl">مقالات جديدة</div>
+                <div class="kpi-tile-lbl">{{ _('athar-detail-metric-created', lang=report_lang) }}</div>
             </div>
             {% endif %}
             {% if project.results.metrics.articles_improved %}
             <div class="kpi-tile">
                 <div class="kpi-tile-val">{{ project.results.metrics.articles_improved }}</div>
-                <div class="kpi-tile-lbl">مقالات مطورة</div>
+                <div class="kpi-tile-lbl">{{ _('athar-detail-metric-improved', lang=report_lang) }}</div>
             </div>
             {% endif %}
             {% if project.results.metrics.files_uploaded %}
             <div class="kpi-tile">
                 <div class="kpi-tile-val">{{ project.results.metrics.files_uploaded }}</div>
-                <div class="kpi-tile-lbl">ملفات في كومنز</div>
+                <div class="kpi-tile-lbl">{{ _('athar-detail-metric-uploaded', lang=report_lang) }}</div>
             </div>
             {% endif %}
         </div>
@@ -127,12 +148,12 @@
 
         {% if project.results.winners %}
         <div style="margin-top: 1rem;">
-            <h4 style="margin: 0 0 0.5rem 0; color: #b7791f; font-size: 1rem;">🥇 الفائزون في المسابقة:</h4>
+            <h4 style="margin: 0 0 0.5rem 0; color: #b7791f; font-size: 1rem;">{{ _('athar-detail-winners-heading', lang=report_lang) }}</h4>
             <table class="report-table">
                 <thead>
                     <tr>
-                        <th style="width: 80px; text-align: center;">المرتبة</th>
-                        <th>اسم المستخدم</th>
+                        <th style="width: 80px; text-align: center;">{{ _r('athar-report-winners-rank', lang=report_lang) }}</th>
+                        <th>{{ _('athar-users-col-username', lang=report_lang) }}</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -147,10 +168,10 @@
         </div>
         {% endif %}
 
-        {% if project.results.notes %}
-        <div
-            style="margin-top: 1rem; background: #fafafa; padding: 0.75rem 1rem; border-radius: 4px; font-style: italic; color: #54595d;">
-            <strong>ملاحظات لجنة التحكيم:</strong> {{ project.results.notes }}
+        {% if loc_notes %}
+        <div style="margin-top: 1rem; background: #fafafa; padding: 0.75rem 1rem; border-radius: 4px; font-style: italic; color: #54595d;">
+            <strong>{{ _r('athar-report-jury-notes', lang=report_lang) }}</strong>
+            <bdi lang="{{ project.localized_source_lang('results_notes', report_lang) }}" dir="auto">{{ loc_notes }}</bdi>
         </div>
         {% endif %}
     </div>
