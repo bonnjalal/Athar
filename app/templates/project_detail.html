@@ -1,134 +1,178 @@
 {% extends "base.html" %}
 
-{% block title %}{{ project.title }} — أثر{% endblock %}
+{% block title %}{{ project.localized_text('title', current_locale()) }} — {{ _('athar-brand-name') }}{% endblock %}
 
 {% block content %}
-<div class="project-detail-container" style="max-width: 900px; margin: 2rem auto; padding: 0 1rem;">
+{% set loc = current_locale() %}
+{% set loc_title = project.localized_text('title', loc) %}
+{% set loc_title_lang = project.localized_source_lang('title', loc) %}
+{% set loc_desc = project.localized_text('description', loc) %}
+{% set loc_desc_lang = project.localized_source_lang('description', loc) %}
+{% set list_sep = ', ' if loc == 'en' else '، ' %}
+<div class="project-detail-container">
     <!-- Breadcrumb -->
-    <nav class="project-breadcrumbs" style="margin-bottom: 1.5rem; font-size: 0.9rem; color: #54595d;">
-        <a href="{{ url_for('web.index') }}" style="color: #36c; text-decoration: none;">الرئيسية</a>
-        <span style="margin: 0 0.5rem;">/</span>
+    <nav class="project-breadcrumbs">
+        <a href="{{ url_for('web.index') }}">{{ _('athar-nav-home') }}</a>
+        <span>/</span>
         {% if community %}
-            <a href="{{ url_for('web.dashboard', slug=community.slug) }}" style="color: #36c; text-decoration: none;">{{ community.name }}</a>
-            <span style="margin: 0 0.5rem;">/</span>
+            <a href="{{ url_for('web.dashboard', slug=community.slug) }}">{{ community.name }}</a>
+            <span>/</span>
+        {% else %}
+            <a href="{{ url_for('web.global_activities') }}">{{ _('athar-nav-activities') }}</a>
+            <span>/</span>
         {% endif %}
-        <span style="color: #202122; font-weight: 600;">{{ project.title }}</span>
+        <span class="breadcrumb-current"><bdi lang="{{ loc_title_lang }}" dir="auto">{{ loc_title }}</bdi></span>
     </nav>
 
-    <div class="project-detail-card" style="background: #ffffff; border: 1px solid #c8ccd1; border-radius: 14px; padding: 2rem; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05);">
+    <div class="project-detail-card">
         <!-- Header -->
-        <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 1rem; border-bottom: 1px solid #eaecf0; padding-bottom: 1.5rem; margin-bottom: 1.5rem;">
+        <div class="project-detail-header">
             <div>
-                <div style="display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.75rem; flex-wrap: wrap;">
-                    <span class="project-type-badge">{{ project.project_type_ar }}</span>
-                    <span class="project-status project-status--{{ project.status|lower|replace(' ', '-') }}">{{ project.status_ar }}</span>
+                <div class="project-detail-badges">
+                    <span class="project-type-badge">{{ project.t_type() }}</span>
+                    <span class="project-status project-status--{{ project.status|lower|replace(' ', '-') }}">{{ project.t_status() }}</span>
                     {% if project.is_contest %}
-                        <span class="project-contest-badge">مسابقة ومنافسة</span>
+                        <span class="project-contest-badge">{{ _('athar-detail-contest-badge') }}</span>
+                    {% endif %}
+                    {% if project.campaign %}
+                        <a href="{{ url_for('web.global_activities', campaign=project.campaign) }}" class="project-campaign-badge">{{ project.campaign }}</a>
                     {% endif %}
                 </div>
-                <h1 style="margin: 0; font-size: 1.75rem; color: #202122; line-height: 1.3;">{{ project.title }}</h1>
+                <h1 class="project-detail-title"><bdi lang="{{ loc_title_lang }}" dir="auto">{{ loc_title }}</bdi></h1>
             </div>
 
-            <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
-                <a href="{{ url_for('web.project_report', project_id=project.id) }}" target="_blank" class="cdx-button" title="طباعة أو حفظ كملف PDF">
-                    📄 طباعة تقرير PDF
+            <div class="project-detail-actions">
+                <a href="{{ url_for('web.project_report', project_id=project.id) }}" target="_blank" class="cdx-button" title="{{ _('athar-detail-print-pdf') }}">
+                    {{ _('athar-detail-print-pdf') }}
                 </a>
-                <a href="{{ url_for('api.export_project_csv', project_id=project.id) }}" class="cdx-button" title="تنزيل قائمة المشاركين كملف CSV">
-                    📥 تصدير المشاركين CSV
+                <a href="{{ url_for('api.export_project_csv', project_id=project.id) }}" class="cdx-button" title="{{ _('athar-detail-export-csv') }}">
+                    {{ _('athar-detail-export-csv') }}
                 </a>
                 {% if can_edit %}
                     <a href="{{ url_for('web.edit_project', project_id=project.id) }}" class="cdx-button cdx-button--action cdx-button--weight-primary">
-                        تعديل النشاط
+                        {{ _('athar-btn-edit-activity') }}
                     </a>
+                {% endif %}
+                {% if deletion_request_url and (can_edit or (current_user and current_user.is_member)) %}
+                    <a href="{{ deletion_request_url }}" target="_blank" rel="noopener noreferrer" class="cdx-button cdx-button--quiet">
+                        {{ _('athar-btn-request-deletion') }}
+                    </a>
+                {% endif %}
+                {% if current_user and current_user.is_admin %}
+                    <form method="POST" action="{{ url_for('admin.soft_delete_project', project_id=project.id) }}" style="margin: 0;" data-confirm-msg="{{ _('athar-detail-soft-delete-confirm') }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                        <button type="submit" class="cdx-button cdx-button--destructive" onclick="return confirm(this.form.dataset.confirmMsg);">
+                            {{ _('athar-btn-soft-delete') }}
+                        </button>
+                    </form>
                 {% endif %}
                 {% if community %}
                     <a href="{{ url_for('web.dashboard', slug=community.slug) }}" class="cdx-button cdx-button--quiet">
-                        العودة للوحة التحكم
+                        {{ _('athar-btn-back-dashboard') }}
                     </a>
                 {% endif %}
             </div>
         </div>
 
-        <!-- Meta Grid -->
-        <div class="modal-meta-grid" style="margin-bottom: 2rem;">
+        <!-- Meta Grid (single unambiguous start/end dates) -->
+        <div class="modal-meta-grid">
             <div class="modal-meta-item">
-                <span class="meta-label">المجتمع التابع له</span>
+                <span class="meta-label">{{ _('athar-field-community') }}</span>
                 <span class="meta-val">
                     {% if community %}
-                        <a href="{{ url_for('web.dashboard', slug=community.slug) }}" style="color: #36c; text-decoration: none; font-weight: 600;">{{ community.name }}</a>
+                        <a href="{{ url_for('web.dashboard', slug=community.slug) }}" style="font-weight: 600;">{{ community.name }}</a>
                     {% else %}
-                        عام
+                        {{ _('athar-field-general') }}
                     {% endif %}
                 </span>
             </div>
 
             <div class="modal-meta-item">
-                <span class="meta-label">المشروع المستهدف</span>
+                <span class="meta-label">{{ _('athar-field-target-wiki') }}</span>
                 <span class="meta-val">
-                    <a href="{{ project.target_wiki_url }}" target="_blank" rel="noopener" style="color: #36c; text-decoration: underline;">
+                    <a href="{{ project.target_wiki_url }}" target="_blank" rel="noopener noreferrer">
                         {{ project.target_wiki }} ({{ project.target_wiki_url }})
                     </a>
                 </span>
             </div>
 
+            {% if project.wiki_link %}
             <div class="modal-meta-item">
-                <span class="meta-label">المنظمون</span>
-                <span class="meta-val" style="font-weight: 600;">{{ project.all_organizers|join('، ') if project.all_organizers else '—' }}</span>
-            </div>
-
-            {% if project.start_date %}
-            <div class="modal-meta-item">
-                <span class="meta-label">تاريخ البدء</span>
-                <span class="meta-val">{{ project.start_date.strftime('%Y-%m-%d') }}</span>
+                <span class="meta-label">{{ _('athar-field-wiki-link') }}</span>
+                <span class="meta-val">
+                    <a href="{{ project.wiki_link }}" target="_blank" rel="noopener noreferrer">{{ project.wiki_link }}</a>
+                </span>
             </div>
             {% endif %}
 
-            {% if project.end_date %}
+            {% if project.campaign %}
             <div class="modal-meta-item">
-                <span class="meta-label">تاريخ الانتهاء</span>
-                <span class="meta-val">{{ project.end_date.strftime('%Y-%m-%d') }}</span>
+                <span class="meta-label">{{ _('athar-field-campaign') }}</span>
+                <span class="meta-val">
+                    <a href="{{ url_for('web.global_activities', campaign=project.campaign) }}">{{ project.campaign }}</a>
+                </span>
             </div>
             {% endif %}
 
             <div class="modal-meta-item">
-                <span class="meta-label">تاريخ البدء</span>
-                <span class="meta-val">{{ project.start_date.strftime('%Y-%m-%d') if project.start_date else 'غير محدد' }}</span>
+                <span class="meta-label">{{ _('athar-field-organizers') }}</span>
+                <span class="meta-val" style="font-weight: 600;">{{ project.all_organizers|join(list_sep) if project.all_organizers else '—' }}</span>
             </div>
 
             <div class="modal-meta-item">
-                <span class="meta-label">تاريخ الانتهاء</span>
-                <span class="meta-val">{{ project.end_date.strftime('%Y-%m-%d') if project.end_date else 'غير محدد' }}</span>
+                <span class="meta-label">{{ _('athar-field-start-date') }}</span>
+                <span class="meta-val">{{ project.start_date.strftime('%Y-%m-%d') if project.start_date else _('athar-field-not-specified') }}</span>
             </div>
 
             <div class="modal-meta-item">
-                <span class="meta-label">تاريخ التسجيل</span>
+                <span class="meta-label">{{ _('athar-field-end-date') }}</span>
+                <span class="meta-val">{{ project.end_date.strftime('%Y-%m-%d') if project.end_date else _('athar-field-not-specified') }}</span>
+            </div>
+
+            <div class="modal-meta-item">
+                <span class="meta-label">{{ _('athar-field-registered-date') }}</span>
                 <span class="meta-val">{{ project.created_at.strftime('%Y-%m-%d') if project.created_at else '-' }}</span>
             </div>
 
             {% if project.is_contest and project.jury_members %}
             <div class="modal-meta-item">
-                <span class="meta-label">لجنة التحكيم</span>
-                <span class="meta-val">{{ project.jury_members|join('، ') }}</span>
+                <span class="meta-label">{{ _('athar-field-jury') }}</span>
+                <span class="meta-val">{{ project.jury_members|join(list_sep) }}</span>
             </div>
             {% endif %}
         </div>
 
+        {% if project.tags %}
+        <div class="project-tags-section">
+            <span class="meta-label">{{ _('athar-field-tags') }}:</span>
+            <div class="project-tags-row">
+                {% for tag in project.tags %}
+                    <a href="{{ url_for('web.global_activities', tag=tag) }}" class="project-tag-chip">#{{ tag }}</a>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
         <!-- Description -->
-        <div class="modal-description-section" style="border-top: 1px solid #eaecf0; padding-top: 1.5rem;">
-            <h3 style="margin-top: 0; color: #202122; font-size: 1.2rem;">تفاصيل ووصف النشاط</h3>
-            <div class="modal-description-content" style="line-height: 1.8; color: #333; font-size: 1rem;">
-                {{ project.description|safe if project.description else '<em>لا توجد تفاصيل إضافية لهذا النشاط.</em>'|safe }}
+        <div class="modal-description-section">
+            <h3>{{ _('athar-detail-description-heading') }}</h3>
+            <div class="modal-description-content" lang="{{ loc_desc_lang }}" dir="auto">
+                {% if loc_desc %}
+                    {{ loc_desc|safe }}
+                {% else %}
+                    <em>{{ _('athar-detail-description-empty') }}</em>
+                {% endif %}
             </div>
         </div>
 
         <!-- Participants Roster -->
         {% if project.participants %}
-        <div class="modal-participants-section" style="border-top: 1px solid #eaecf0; padding-top: 1.5rem; margin-top: 1.5rem;">
-            <h3 style="margin-top: 0; color: #202122; font-size: 1.2rem;">قائمة المشاركين ({{ project.participants|length }})</h3>
-            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.75rem;">
+        <div class="modal-participants-section">
+            <h3>{{ _('athar-detail-participants-heading', project.participants|length) }}</h3>
+            <div class="participants-chip-grid">
                 {% for part in project.participants %}
-                    <a href="{{ url_for('web.user_profile', username=part) }}" style="background: #f8f9fa; border: 1px solid #c8ccd1; border-radius: 20px; padding: 4px 12px; font-size: 0.88rem; color: #36c; text-decoration: none; display: inline-flex; align-items: center; gap: 6px;">
-                        <span>👤</span> {{ part }}
+                    <a href="{{ url_for('web.user_profile', username=part) }}" class="participant-pill-link">
+                        {{ part }}
                     </a>
                 {% endfor %}
             </div>
@@ -137,22 +181,21 @@
 
         <!-- Results & Outcomes -->
         {% if project.results %}
-        <div class="modal-results-section" style="border-top: 1px solid #eaecf0; padding-top: 1.5rem; margin-top: 1.5rem;">
-            <h3 style="margin-top: 0; color: #202122; font-size: 1.2rem;">🏆 مخرجات ونتائج النشاط</h3>
-            
-            {% if project.results.summary %}
-            <p style="color: #333; line-height: 1.6; margin-bottom: 1rem;">
-                {{ project.results.summary }}
-            </p>
+        <div class="modal-results-section">
+            <h3>{{ _('athar-detail-results-heading') }}</h3>
+
+            {% set loc_summary = project.localized_text('results_summary', loc) %}
+            {% if loc_summary %}
+            <p class="results-summary-text"><bdi lang="{{ project.localized_source_lang('results_summary', loc) }}" dir="auto">{{ loc_summary }}</bdi></p>
             {% endif %}
 
             {% if project.results.winners %}
-            <div style="background: #fdfaf2; border: 1px solid #f6e05e; border-radius: 8px; padding: 1rem 1.25rem; margin-bottom: 1rem;">
-                <h4 style="margin-top: 0; color: #b7791f; font-size: 0.95rem; margin-bottom: 0.5rem;">🥇 الفائزون في المسابقة:</h4>
-                <ol style="margin: 0; padding-right: 1.25rem;">
+            <div class="results-winners-card">
+                <h4>{{ _('athar-detail-winners-heading') }}</h4>
+                <ol>
                     {% for w in project.results.winners %}
-                        <li style="margin-bottom: 4px;">
-                            <a href="{{ url_for('web.user_profile', username=w) }}" style="color: #36c; font-weight: 600; text-decoration: none;">{{ w }}</a>
+                        <li>
+                            <a href="{{ url_for('web.user_profile', username=w) }}">{{ w }}</a>
                         </li>
                     {% endfor %}
                 </ol>
@@ -160,31 +203,33 @@
             {% endif %}
 
             {% if project.results.metrics %}
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
+            <div class="results-metrics-grid">
                 {% if project.results.metrics.articles_created %}
-                <div style="background: #f8f9fa; border: 1px solid #eaecf0; border-radius: 8px; padding: 0.75rem; text-align: center;">
-                    <div style="font-size: 1.25rem; font-weight: bold; color: #202122;">{{ project.results.metrics.articles_created }}</div>
-                    <div style="font-size: 0.8rem; color: #54595d;">مقالات جديدة</div>
+                <div class="results-metric-box">
+                    <div class="results-metric-val">{{ project.results.metrics.articles_created }}</div>
+                    <div class="results-metric-lbl">{{ _('athar-detail-metric-created') }}</div>
                 </div>
                 {% endif %}
                 {% if project.results.metrics.articles_improved %}
-                <div style="background: #f8f9fa; border: 1px solid #eaecf0; border-radius: 8px; padding: 0.75rem; text-align: center;">
-                    <div style="font-size: 1.25rem; font-weight: bold; color: #202122;">{{ project.results.metrics.articles_improved }}</div>
-                    <div style="font-size: 0.8rem; color: #54595d;">مقالات مطورة</div>
+                <div class="results-metric-box">
+                    <div class="results-metric-val">{{ project.results.metrics.articles_improved }}</div>
+                    <div class="results-metric-lbl">{{ _('athar-detail-metric-improved') }}</div>
                 </div>
                 {% endif %}
                 {% if project.results.metrics.files_uploaded %}
-                <div style="background: #f8f9fa; border: 1px solid #eaecf0; border-radius: 8px; padding: 0.75rem; text-align: center;">
-                    <div style="font-size: 1.25rem; font-weight: bold; color: #202122;">{{ project.results.metrics.files_uploaded }}</div>
-                    <div style="font-size: 0.8rem; color: #54595d;">ملفات في كومنز</div>
+                <div class="results-metric-box">
+                    <div class="results-metric-val">{{ project.results.metrics.files_uploaded }}</div>
+                    <div class="results-metric-lbl">{{ _('athar-detail-metric-uploaded') }}</div>
                 </div>
                 {% endif %}
             </div>
             {% endif %}
 
-            {% if project.results.notes %}
-            <div style="font-size: 0.88rem; color: #54595d; font-style: italic; background: #fafafa; padding: 0.75rem; border-radius: 6px;">
-                <strong>ملاحظات:</strong> {{ project.results.notes }}
+            {% set loc_notes = project.localized_text('results_notes', loc) %}
+            {% if loc_notes %}
+            <div class="results-notes-box">
+                <strong>{{ _('athar-detail-notes') }}</strong>
+                <bdi lang="{{ project.localized_source_lang('results_notes', loc) }}" dir="auto">{{ loc_notes }}</bdi>
             </div>
             {% endif %}
         </div>

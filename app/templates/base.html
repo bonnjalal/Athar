@@ -1,35 +1,81 @@
 <!DOCTYPE html>
-<html lang="ar" dir="rtl">
+<html lang="{{ current_locale() }}" dir="{{ locale_dir() }}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ config.COMMUNITY_NAME if config else 'مشروع أثر' }} — أثر</title>
+    <meta name="application-name" content="Athar">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <title>{% block title %}{{ _('athar-app-title') }}{% endblock %}</title>
+    <script>
+        try {
+            var atharSavedTheme = localStorage.getItem('athar-theme');
+            if (atharSavedTheme !== 'dark' && atharSavedTheme !== 'light') {
+                atharSavedTheme = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+            }
+            document.documentElement.dataset.theme = atharSavedTheme;
+        } catch (e) {
+            document.documentElement.dataset.theme = 'light';
+        }
+    </script>
     <!-- Wikimedia Codex CSS Distribution -->
     <link rel="stylesheet" href="https://tools-static.wmflabs.org/cdnjs/ajax/libs/codex/0.17.1/codex.style.min.css">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/codex.style.css') }}">
-    <!-- Chart.js for data visualization -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        window.ATHAR_LOCALE = {{ current_locale()|tojson }};
+        window.ATHAR_I18N = {{ get_client_catalog()|tojson }};
+    </script>
+    <script src="{{ url_for('static', filename='js/i18n.js') }}"></script>
 </head>
 <body class="cdx-body">
 <header class="cdx-header">
-    <div class="header-container" style="display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 1.5rem;">
-        <a href="{{ url_for('web.index') }}" class="brand-title" style="display: flex; align-items: center; gap: 0.75rem; text-decoration: none; color: inherit;">
-            <img src="{{ url_for('static', filename='images/logo.png') }}" alt="شعار أثر" style="height: 40px; width: auto; object-fit: contain;">
-            {% if community %}
-                <span style="font-weight: bold; font-size: 1.2rem;">{{ community.name }}</span>
-            {% endif %}
-        </a>
-        
-        {% if request.endpoint and request.endpoint != 'web.index' %}
-            <nav class="nav-links">
-                {% if session.get('username') %}
-                    <span class="user-greeting">مرحباً، <strong>{{ session.get('username') }}</strong></span>
-                    <a href="{{ url_for('oauth.logout') }}" class="cdx-button cdx-button--quiet">تسجيل الخروج</a>
-                {% else %}
-                    <a href="{{ url_for('oauth.login') }}" class="cdx-button cdx-button--action cdx-button--weight-primary">تسجيل الدخول عبر ويكيميديا</a>
+    <div class="header-container">
+        <div class="header-brand-cluster">
+            <a href="{{ url_for('web.index') }}" class="brand-title">
+                <img src="{{ url_for('static', filename='images/logo.png') }}" alt="{{ _('athar-brand-name') }}" class="header-logo-img">
+                <span>{{ _('athar-brand-name') }}</span>
+                {% if community %}
+                    <span class="header-community-sep">/</span>
+                    <span class="header-community-name">{{ community.name }}</span>
                 {% endif %}
-            </nav>
-        {% endif %}
+            </a>
+        </div>
+
+        <nav class="nav-links" aria-label="{{ _('athar-nav-login') }}">
+            <!-- Header Language Switcher -->
+            <form action="{{ url_for('web.set_language') }}" method="POST" class="lang-switch-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                <input type="hidden" name="next" value="{{ request.full_path.rstrip('?') if request.query_string else request.path }}" />
+                <label for="header-lang-select" class="sr-only">{{ _('athar-lang-switch-label') }}</label>
+                <select id="header-lang-select" name="lang" class="cdx-select lang-switch-select" onchange="this.form.submit()" aria-label="{{ _('athar-lang-switch-label') }}">
+                    {% for code in supported_locales %}
+                        <option value="{{ code }}" {% if current_locale() == code %}selected{% endif %}>{{ locale_label(code) }} ({{ code }})</option>
+                    {% endfor %}
+                </select>
+            </form>
+
+            <!-- Dynamic Theme Toggle Button -->
+            <button type="button" id="theme-toggle-btn" class="cdx-button cdx-button--quiet theme-toggle-btn"
+                aria-label="{{ _('athar-theme-toggle-label') }}"
+                title="{{ _('athar-theme-toggle-label') }}">
+                <span class="theme-toggle-icon" aria-hidden="true"></span>
+                <span class="theme-toggle-text">{{ _('athar-theme-dark') }}</span>
+            </button>
+
+            {% if current_user %}
+                {% if current_user.is_admin %}
+                    <a href="{{ url_for('admin.admin_console') }}" class="header-util-link admin-nav-link">{{ _('athar-nav-admin') }}</a>
+                {% endif %}
+                <a href="{{ url_for('web.user_profile', username=current_user.username) }}" class="user-greeting">
+                    {{ _('athar-nav-greeting', current_user.username) }}
+                </a>
+                {% if current_user.is_admin %}
+                    <span class="admin-role-pill">{{ _('athar-admin-badge') }}</span>
+                {% endif %}
+                <a href="{{ url_for('oauth.logout') }}" class="header-util-link">{{ _('athar-nav-logout') }}</a>
+            {% else %}
+                <a href="{{ url_for('oauth.login') }}" class="cdx-button cdx-button--action cdx-button--weight-primary header-login-btn">{{ _('athar-nav-login') }}</a>
+            {% endif %}
+        </nav>
     </div>
 </header>
     <main class="main-content">
@@ -49,9 +95,10 @@
     </main>
 
     <footer class="cdx-footer">
-        <p>أثر — أداة مجتمعية مفتوحة المصدر مستضافة على <a href="https://toolforge.org">Wikimedia Toolforge</a>. | <a href="{{ url_for('web.export_view') }}" style="color: #36c;">تصدير التقارير</a></p>
+        <p>{{ _('athar-footer-credit', '<a href="https://toolforge.org">Wikimedia Toolforge</a>')|safe }} | <a href="{{ url_for('web.export_view') }}">{{ _('athar-nav-export') }}</a></p>
     </footer>
 
+    <script src="{{ url_for('static', filename='js/theme.js') }}" defer></script>
     {% block scripts %}{% endblock %}
 </body>
 </html>

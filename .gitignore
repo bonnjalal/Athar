@@ -28,3 +28,5 @@ postman/
 # Local subdirectory READMEs (only the root README.md is tracked)
 */**/README.md
 !/README.md
+
+fc.txt

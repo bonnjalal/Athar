@@ -1,99 +1,129 @@
-# Multi-Level Reporting & Contributor Intelligence Feature (`concepts_brief.md`)
+# Athar Platform Redesign, Activity Taxonomy, Multilingual Support, Theme Toggle & Admin Governance
 
-* **Author:** Athar Engineering
-* **Date:** 2026-11-03
-* **Status:** Finalized Concept Brief (Goldfish Review Approved)
+* **Author:** Bonnjalal00
+* **Date:** 2026-11-16
 
 ## Overview
 
-This feature establishes an end-to-end contributor intelligence and multi-tiered reporting architecture for Athar, optimized for Wikimedia Toolforge hosting and universal internationalization (Translatewiki.net). It introduces a global Contributor Profile (`/user/<username>`) aggregating cross-wiki CentralAuth metrics and project involvement across multiple affiliate user groups. Additionally, it implements a symmetrical, three-tiered export system (Single Project, Affiliate Community, and Contributor Profile) delivered through structured CSV datasets and universal, print-optimized HTML reports designed for one-click browser PDF saving.
+This proposal expands Athar from an Arabic-only, community-scoped tool into a multilingual, cross-community Wikimedia affiliate hub hosted on Toolforge, delivered across three sequential phases:
+1. **Phase 1 (Core Schema, Admin Panel & Global Discovery):** Clean up duplicate form/detail date fields, extend `Project` with optional Wikimedia/WMCloud/Toolforge `wiki_link`, separate `campaign` and normalized `tags` (`project_tags`), add database-backed Tool Admins (seeded with `Bonnjalal00`) with an `/admin` governance panel (Admin-only community creation and full community editing including `slug`, Admin project editing, and Admin-only project soft-delete/restore/purge), and redesign `/` alongside a global `/activities` search directory.
+2. **Phase 2 (Translatewiki Localization & RTL/LTR Layout):** Migrate static UI and report text to Translatewiki-compatible `banana-i18n` JSON files (`en` default fallback plus `ar`, with `qqq.json` message documentation), support per-request `?lang=` report/CSV overrides, and migrate CSS layout rules to directional logical properties.
+3. **Phase 3 (Multilingual Activity Content, MinT & Theme Toggle):** Add `primary_lang` and `translations` JSON to `Project` with a Commons-style `"+ Add in another language"` panel and CSRF-protected Wikimedia MinT (`https://translate.wmcloud.org`) pre-translation, plus an explicit dark/light theme switcher keeping printable reports in light mode.
 
-## Analysis & Architectural Decisions
+## Analysis
 
-### 1. Global Contributor Profile (`/user/<username>`)
-* **Global Scope with Multi-Affiliate Aggregation:** Aggregates a contributor's activity across all registered affiliate user groups (`CommunityMember`).
-* **Zero-External-Network Invariant:** The profile page reads strictly from the local database: cached `StatSnapshot.wiki_breakdown` (populated asynchronously by `scripts/sync_data.py` on a 4-hour schedule). No live outbound HTTP calls are made during web page loads, eliminating Toolforge HTTP 504 timeout risks.
-* **Sync Transparency Badge:** Displays a prominent sync metadata badge showing:
-  - Last synced timestamp and relative time (e.g., "تم التحديث قبل ساعة واحدة").
-  - Next scheduled sync projection (based on the 4-hour cycle).
-* **Wiki Breakdown Strategy:** The top 4–5 wikis are sorted locally in Python (`sorted(snapshot.wiki_breakdown.items(), key=lambda x: x[1], reverse=True)[:5]`). Outbound links point to `https://xtools.wmcloud.org/ec/{wiki}/{username}` for users seeking full revision history.
-* **Interactive Filters:**
-  - Affiliate Group filter: dropdown allowing viewing all groups or isolating a specific affiliate.
-  - Role filter: filter by Lead Organizer, Co-organizer, Contest Jury, or Participant.
-  - Date Range filter: filter project activities by year or custom date range.
+Six independent Goldfish reviews evaluated this concept against the Athar repository (`/home/bonnjalal/Documents/Athar`). Below is the deduplicated analysis across all six lenses, incorporating resolved scope decisions.
 
-### 2. Project Schema Evolution & Volunteer Form Ergonomics
-* **Database Schema Extension:** Add two optional JSON fields to `Project`:
-  - `participants: List[str]`: Homogeneous list of username strings, matching `co_organizers` and `jury_members`.
-  - `results: Dict`: Standardized structured dictionary storing contest metrics, winners, Challenges and outcomes.
-* **Volunteer Form Ergonomics (No Raw JSON):**
-  - **Participants Input:** A user-friendly, multi-line textarea in `project_form.html` where volunteers paste usernames line-by-line or comma-separated. The backend trims whitespace, deduplicates entries, and stores clean strings.
-  - **Results Input:** A guided form interface with dedicated, human-friendly input fields:
-    - Executive Summary / Description (`summary: str`)
-    - Contest Winners / Honorees (`winners: List[str]`, entered line-by-line)
-    - Output Metrics (Articles Created, Articles Improved, Files Uploaded)
-    - Additional Notes and challenes (`notes: str`)
-  - The application automatically bundles these into the validated `results` JSON dictionary on submit, completely shielding volunteers from technical syntax.
-* **Database Migration & Indexing:**
-  - Provide an idempotent migration script (`scripts/migrate_v2.py`) executing:
-    ```sql
-    ALTER TABLE projects ADD COLUMN participants JSON NULL;
-    ALTER TABLE projects ADD COLUMN results JSON NULL;
-    ```
-  - Add explicit indexing on `Project.lead_organizer` (`index=True`) and composite indexing on `StatSnapshot(user_id, recorded_at.desc())` to optimize lookups.
+### 1. Contrarian / YAGNI & Scope Complexity
+* **Phasing Over Single-Release Bundling:** The current Flask codebase has roughly 1,800 lines of Python, no Alembic migration setup, and no automated client JavaScript tests. Shipping database changes, Admin RBAC, global discovery, full Translatewiki localization, MinT machine translation, and CSS theming in one deployment risked half-migrated schemas and UI regressions. Splitting delivery into three phases isolates schema and governance risks first.
+* **Activity `translations` + MinT Overhead (Deferred to Phase 3):** Persisting machine-translated HTML (`Project.description` uses Bleach-sanitized HTML) inside a `translations` JSON column introduces stale-translation drift when primary fields change, potential HTML tag distortion from MT, and mixed-language reports when only some records are translated. Deferring this to Phase 3 keeps Phase 1 and Phase 2 stable.
+* **Separate `tags` vs. `campaign`:** `Project` (`app/models.py`) already has `project_type` and `is_contest`. Adding both `campaign` and free-form `tags` creates filtering and schema requirements across SQLite (dev) and MariaDB (Toolforge ToolsDB). Storing `tags` in a normalized `project_tags` join table avoids raw JSON dialect differences while keeping `tags` completely separate from `campaign`.
+* **External Deletion Requests vs. In-Tool Queue:** Replacing an in-tool organizer deletion-request ticket queue (`deletion_requested`, `deletion_reason` columns and request/withdraw/reject routes) with an external Meta-Wiki request page eliminates extra database state transitions and UI clutter while keeping Admin soft-delete/restore/purge inside `/admin`.
 
-### 3. Symmetrical Multi-Level Routing & Dual-Tier Export Architecture
-To support universal internationalization (Arabic RTL, Chinese, Hindi, etc.) without bundling language-specific TTF fonts or fragile C-libraries on Toolforge:
-* **Tier 1: Presentation & Printable HTML Reports (`web_bp`)**:
-  - Level 1 (Project Dossier): `GET /project/<int:project_id>/report`
-  - Level 2 (Affiliate Executive Report): `GET /<slug>/report`
-  - Level 3 (Contributor Dossier): `GET /user/<string:username>/report`
-  - *Print Layout:* Dedicated `templates/reports/base_report.html` devoid of navbars, sidebars, and flash messages, enforcing `@page { size: A4; margin: 15mm; }`, `-webkit-print-color-adjust: exact;`, and `break-inside: avoid;` for clean, one-click PDF generation via the browser print dialog.
-* **Tier 2: Structured Data Downloads (`api_bp`)**:
-  - Level 1 (Participant Roster & Outcomes CSV): `GET /api/projects/<int:project_id>/export?format=csv`
-  - Level 2 (Affiliate Activities CSV): `GET /api/<slug>/export?format=csv`
-  - Level 3 (Contributor History & Metrics CSV): `GET /api/user/<string:username>/export?format=csv`
-  - *CSV Security:* Prepend a single quote (`'`) to any exported CSV cell whose string value begins with `=`, `+`, `-`, `@`, `\t`, or `\r` to prevent spreadsheet formula injection.
+### 2. Cost, Quota, Security & System Architecture
+* **MinT API Architecture, CSRF Exemption & Worker Starvation (Phase 3):** Calling `translate.wmcloud.org` directly from browser JS hits CORS limits and cannot attach a Wikimedia `User-Agent`. However, `app/__init__.py` sets `csrf.exempt(api_bp)`, so placing a MinT proxy on `api_bp` would expose an unprotected outbound translation relay. Furthermore, `Procfile` configures only 4 synchronous Gunicorn workers (`-w 4`); firing 4 calls (`title`, `description`, `results_summary`, `results_notes`) per click can tie up all 4 workers under moderate traffic and trigger Toolforge timeouts or `429` throttling. Any MinT proxy must sit behind CSRF protection + `@member_required`, enforce per-user rate limits, cap payload size, use a bounded HTTP timeout (e.g., 10 seconds), coalesce calls, and fall back to manual input on upstream failures.
+* **Stored XSS Vector in `Project.translations` (Phase 3):** `app/templates/project_detail.html`, printable reports (`app/templates/reports/*.html`), and `app/static/js/filters.js` render `Project.description` as raw HTML (`|safe` / `innerHTML`). Every translated `description` saved through web or API routes (including MinT responses) must pass through the exact `bleach.clean` tag/protocol allowlist before saving, while `title`, `results_summary`, and `results_notes` strip all HTML.
+* **Auth & Privilege Escalation Gaps (`app/oauth.py`):**
+  * `oauth_callback()` looks up `User` case-sensitively and does not create a `User` row if missing—meaning `"Bonnjalal00"` or a newly promoted Admin logging in before roster sync runs gets `get_current_user() == None`.
+  * `User.is_member` (`app/models.py`) defaults to `True`, so creating a `User` row for a non-rostered Admin without explicitly setting `is_member=False` silently grants community-member permissions.
+  * Caching privileges (`session['is_member']`) in signed cookies delays revocation until logout; `is_admin` must be checked against fresh database state (plus `ADMIN_USERS` bootstrap config) on every request, and `/admin` must block removing the last active Admin.
+  * `get_current_user()` returns a `dict` when `MOCK_AUTH=True` instead of a `User` model instance, and `member_required` / `project_editor_required` skip checks unconditionally under `MOCK_AUTH`. Production startup must reject `MOCK_AUTH=True`, and tests must cover RBAC with `MOCK_AUTH=False`.
+  * `POST /<slug>/sync` (`app/routes/web.py`) currently lacks an auth decorator, and `PUT /api/projects/<id>` falls under `csrf.exempt(api_bp)`. Admin and destructive mutations must require authenticated CSRF-protected `POST` handlers.
+* **`wiki_link` URL Parsing, Expanded Domains & Column Sizing:** `is_allowed_wikimedia_host()` (`app/wiki_utils.py`) validates only raw hostnames. Validating `wiki_link` needs `urllib.parse.urlparse()` enforcing `https://`, rejecting userinfo (`user@host` spoofing), custom ports, and non-HTTP schemes (`javascript:`), and verifying `parsed.hostname` against an activity-URL allowlist covering both Wikimedia project domains (`wikipedia.org`, `wikimedia.org`, `wikidata.org`, `wikisource.org`, `wiktionary.org`, `wikibooks.org`, `wikiquote.org`, `wikivoyage.org`, `wikinews.org`, `wikiversity.org`, `mediawiki.org`, `wikifunctions.org`) and Wikimedia cloud/tool hosting (`wmcloud.org`, `wmflabs.org`, `toolforge.org`). Percent-encoded Arabic Wikimedia URLs routinely exceed 255–512 characters, so `wiki_link` should use `db.String(1024)` (or `db.Text`) without a B-tree index (which exceeds InnoDB's 3072-byte `utf8mb4` index key limit).
 
-### 4. Background Synchronization Hardening
-* **Roster Deduplication:** In `scripts/sync_data.py`, aggregate and deduplicate usernames across all community Meta-Wiki rosters before dispatching CentralAuth queries, avoiding redundant requests for contributors who belong to multiple affiliate groups.
-* **Namespace Isolation:** Enforce reserved word checks in `slugify()` to prevent communities from claiming `user`, `project`, `export`, or `api`.
+### 3. UX, Developer & Translator Ergonomics
+* **Community Editing Including `slug` (`/admin`):** Because `Project.community_id` and `CommunityMember.community_id` link to `communities.id` (integer primary key), Admins can edit any `Community` field (`name`, `slug`, `meta_roster_page`, `contact_email`) without breaking relational foreign keys—provided `slug` edits normalize via `slugify`, check uniqueness, reject `RESERVED_SLUGS`, and update `session['community_slug']` if active. Editing `slug` does invalidate prior bookmarked `/<old-slug>/` links unless warned in `/admin` or paired with redirects. Editing `meta_roster_page` should also offer or trigger roster re-sync.
+* **Split-Brain Primary Language & Stale Overrides (Phase 3):** `Project` currently has no `primary_lang` (`source_lang`) column, while existing records mix English and Arabic. Without an explicit `primary_lang` selector, MinT receives the wrong source language when an organizer uses an English UI to add an Arabic activity (or vice versa), and local wikis (`arywiki`, `zghwiki`, `shiwiki`) may lack MinT support. Avoiding duplicate `translations[primary_lang]` entries prevents stale overrides from shadowing edited primary fields.
+* **Field Clarity (`wiki_link` vs. `target_wiki`, `campaign` vs. `project_type`, `tags`):** `project_form.html` labels the `target_wiki` preview `"الرابط المعتمد"` ("Approved link"), which leads users to confuse the wiki platform code (`target_wiki`) with the specific activity page URL (`wiki_link`). Similarly, `project_type` already includes `"Campaign"`, requiring clear helper text separating activity format from cross-wiki `campaign` names (`Wiki Loves Monuments`, `1Lib1Ref`), while `tags` multi-chip inputs must detach from `/api/check-user` lookup and auto-commit pending input on blur/submit.
+* **Landing Page (`/`), Hidden Header Navigation & Bait-and-Switch:** `app/templates/base.html` hides `<nav class="nav-links">` when `request.endpoint == 'web.index'`, hiding login, theme, language, and `/admin` links on `/`. Meanwhile, `app/templates/index.html` exposes `+ Add this community` and prompts logged-out visitors to sign in to add communities—creating a bait-and-switch once `POST /add-community` is restricted to Tool Admins. Separating the community filter from the global activity search bar on `/`, bounding the `"In Progress"` preview (e.g., 4–6 cards with community badges), and hiding Admin-only community creation from regular users fixes this friction.
+* **Translatewiki `banana-i18n` Compliance & Report Language Separation (Phase 2):** Existing templates use concatenated sentence fragments ("lego strings" such as `users.html` line 38) and omit CLDR plural rules (`{{PLURAL:$1|...}}`—Arabic uses 6 plural forms). Translatewiki requires full parameterized `$1` messages documented in `qqq.json`. In addition, coordinators using an Arabic UI often need English PDF/CSV reports, so `?lang=` on report/CSV routes must override output language per request without mutating the user's UI session language.
+
+### 4. Migration & Backward Compatibility
+* **No Alembic / `db.create_all()` Gap:** `app/__init__.py` only calls `db.create_all()`, which never alters existing `users` or `projects` tables. Deploying new columns without running an idempotent `scripts/migrate_v3.py` (modeled on `scripts/migrate_v2.py`) beforehand will trigger `OperationalError` across web routes and the 4-hour `jobs.yaml` sync script (`scripts/sync_data.py`). In MariaDB, new `JSON` columns (`translations`) must be DDL `NULL`, and `NOT NULL` booleans (`is_admin`, `is_deleted`) require `DEFAULT 0`. Rolling back code after projects are soft-deleted exposes deleted rows unless pre-migration snapshots or rollback gates are used.
+* **Cross-Dialect `tags` & JSON Storage:** SQLite (`json_each`) and MariaDB (`JSON_CONTAINS`) lack portable JSON array querying, and SQLAlchemy's default `db.JSON` escapes non-ASCII characters as `\uXXXX`. Modeling `tags` via a `project_tags` join table (`project_id`, `tag` indexed) enables portable, indexed SQL filtering on both SQLite and MariaDB. For Phase 3 `translations`, configure `ensure_ascii=False` and assign fresh dict copies or call `flag_modified` on updates.
+* **Route Slug Collision & Existing Code Bugs:**
+  * `RESERVED_SLUGS` in `app/routes/web.py` omits `"activities"`, `"admin"`, `"login"`, `"logout"`, `"oauth"`, and `"add-community"` (note `"admin"` is already in `RESERVED_SLUGS`, `"activities"` and auth/route names must be added).
+  * `app/templates/project_form.html` currently renders **duplicate** `start_date`, `end_date`, and `status` inputs (lines 98–123 vs. lines 133–168) with conflicting JS handlers (`syncStatusFromDates` vs. `updateCalculatedStatus`), and `app/templates/project_detail.html` renders start/end dates twice (lines 79–91 vs. lines 93–101).
+  * `Project.sync_status_with_dates()` (`app/models.py`) calls `determine_project_status(..., "auto")`, which overwrites `"Canceled"` projects back to date-derived statuses during `GET` requests.
+  * `app/query_utils.py` silently defaults `year` to the current year when `month` is queried alone, and checks `start_date` inside the range rather than interval overlap (`start_date <= period_end AND end_date >= period_start`).
+
+### 5. Observability, Operational Readiness & Testing Gaps
+* **Soft-Delete Query Leakage Across 19+ Sites:** `Project.query` and `db.session.get(Project, ...)` appear across `web.py`, `api.py`, and `scripts/sync_data.py` (`sync_project_contributors`). Every public page, KPI counter, chart endpoint, user profile, CSV/PDF report, API route, and background sync must apply an active-project filter (`is_deleted == False`), while `Community.projects` (`cascade="all, delete-orphan"`) must be guarded so community actions never silently wipe projects. Permanent purge in `/admin` must require `POST` + CSRF + explicit confirmation.
+* **Governance Audit Trail & Telemetry:** Admin grants/revocations, community creation/edits (including `slug` changes), soft-deletes, restores, and permanent purges need `deleted_by`, `deleted_at`, and structured audit logging. MinT calls (Phase 3) need `request_id`, status code, and latency logging; `web.py` must stop flashing raw `str(e)` strings to browsers; `api.py` (`check_user`) must log upstream failures instead of swallowing exceptions; and a `/healthz` readiness endpoint should verify database schema columns and i18n JSON integrity.
+* **Test Suite Coverage Gaps:** Existing pytest suites run on `sqlite:///:memory:` with `WTF_CSRF_ENABLED = False`, inherit `MOCK_AUTH` from `.env`, and have zero JavaScript test coverage. Verification must add CSRF-enabled `POST` tests, a full RBAC matrix under `MOCK_AUTH=False`, soft-delete isolation tests across all exports/reports, `ar`/`en` RTL/LTR rendering checks (Phase 2), and mocked MinT/XSS tests (Phase 3).
+
+### 6. Long-Term Tech Debt & Structural Maintainability
+* **5x Duplication of Filters, Taxonomies & Wiki Maps:** `app/routes/api.py` duplicates `filter_projects_by_date` from `app/query_utils.py` while `GET /api/projects` ignores both. Activity types, statuses, and wiki maps are copied across `app/wiki_utils.py`, `project_form.html`, `activities.html`, `filters.js` (twice), `charts.js`, and `export.js`. Furthermore, `filters.js` aborts when hidden `#list-comm` is absent, wipes server-rendered `#filter-results` on load, ignores `/` GET query params, omits `Canceled`, and shows modal edit buttons to unauthenticated users. Consolidating onto `query_utils.py` and shared URL-synced SSR/API contracts removes drift.
+* **CSS, Theme FOUC & Broken Report Stylesheet (Phase 2 & 3):** `app/static/css/codex.style.css` mixes three partial `@media (prefers-color-scheme: dark)` blocks with hardcoded physical RTL rules (`direction: rtl`, `text-align: right`, `right:`/`left:` offsets), while nearly every template hardcodes inline light hex colors (`#ffffff`, `#202122`, `#54595d`). Switching to `<html dir="ltr">` will break spacing/icons unless migrated to CSS logical properties (`inset-inline-*`, `margin-inline-*`, `text-align: start`), and applying `data-theme` in a deferred script causes white flash-of-unstyled-content (FOUC) unless set by a tiny blocking `<head>` script. Chart.js also requires theme-change listeners, and `app/templates/reports/base_report.html` currently references a missing `static/css/main.css` file (404 on every report).
+* **Write-on-GET Contention & Monolithic Blueprints:** Calling `sync_status_with_dates()` + `db.session.commit()` inside `GET` routes risks SQLite `database is locked` errors under Gunicorn and adds latency; status syncing belongs in write hooks and `scripts/sync_data.py`. Finally, `web.py` (871 lines) and `api.py` (792 lines) should be split into focused blueprints/modules (`admin`, `activities`, `i18n`, `reports`) before adding new routes.
 
 ## Goals vs. Non-Goals
 
 * **In-Scope Goals:**
-  - Build global `/user/<username>` profile view with multi-affiliate project aggregation, affiliate group filtering, sync transparency badge, and top-5 CentralAuth wiki breakdown.
-  - Extend `Project` model with `participants: List[str]` and `results: Dict` JSON columns, accompanied by idempotent migration tooling and volunteer-friendly form controls.
-  - Implement symmetrical dual-tier export routes across Level 1 (Single Project), Level 2 (Affiliate Group), and Level 3 (Contributor Profile).
-  - Create dedicated, print-optimized HTML templates (`@media print`) enabling clean, universal browser PDF export without server font bundles.
-  - Implement CSV formula injection escaping and background CentralAuth sync deduplication.
+  * **Phase 1 — Core Schema, `/admin` Governance & Global Discovery:**
+    * Remove duplicate date/status controls in `project_form.html` and duplicate date rows in `project_detail.html`; fix `"Canceled"` status overwrite and remove write-on-GET status commits.
+    * Extend `Project` with optional `wiki_link` (strict `https://` validation allowing Wikimedia project domains plus `wmcloud.org`, `wmflabs.org`, and `toolforge.org`), separate searchable `campaign` (cross-wiki presets + custom input), and separate `tags` stored via a portable `project_tags` join table (`multi-chip` UI detached from user validation).
+    * Add `User.is_admin` (seeded with `Bonnjalal00` + `ADMIN_USERS` config), case-insensitive OAuth `User` upsert (`is_member=False` for un-rostered users), fresh DB role evaluation, and an `/admin` panel where Admins manage Admin roles, add/edit communities (including validated `slug` edits), edit any project, and soft-delete (`is_deleted`, `deleted_at`, `deleted_by`), restore, or permanently purge projects (with a global active-project query scope across all non-admin views/exports/sync).
+    * Redesign `/` (`index.html`) with visible header navigation (including `/admin` link for Admins), a bounded preview of currently running (`In Progress`) activities across all communities, and a search/filter bar routing via GET to a new global `/activities` directory unified with `/<slug>/activities`, `/api/projects`, `query_utils.py`, and `filters.js`.
+  * **Phase 2 — Translatewiki `banana-i18n` Localization & RTL/LTR Layout:**
+    * Externalize static UI and report strings (Jinja, Python flashes, `format_relative_time`, CSV headers/roles, JS UI/charts) into Translatewiki-compatible `banana-i18n` JSON bundles (`i18n/ui/` and `i18n/reports/` with `en.json` default fallback, `ar.json`, and `qqq.json`), supporting `$1` parameters and CLDR `{{PLURAL:$1|...}}` rules.
+    * Add a top-header language switcher (`<html lang="..." dir="rtl|ltr">`), `?lang=` report/CSV language overrides, and CSS logical properties (`inset-inline-*`, `margin-inline-*`, `text-align: start`) replacing physical RTL CSS, plus fixing `reports/base_report.html`'s missing `css/main.css` link.
+  * **Phase 3 — Multilingual Activity Content (MinT) & Dark/Light Theme:**
+    * Add `primary_lang` and `translations` JSON to `Project`, a Commons-style `"+ Add in another language"` panel in `project_form.html`, and an authenticated, CSRF-protected, rate-limited backend proxy to Wikimedia MinT (`https://translate.wmcloud.org`) with `bleach.clean` HTML sanitization and fallback rendering in views/reports/CSVs.
+    * Replace partial dark media queries and inline hex colors with semantic CSS variables under `:root[data-theme="light|dark"]`, an anti-FOUC inline `<head>` script, a header toggle icon persisted in `localStorage`, and Chart.js re-theming, while keeping printable reports pinned to light mode.
 
 * **Out-of-Scope Non-Goals:**
-  - Synchronous real-time external API crawling during web request lifecycles.
-  - Server-side headless browser binary installation (Puppeteer, Playwright) or C-dependency PDF engines on Toolforge.
-  - Automated wikitext web scraping of arbitrary on-wiki contest pages (replaced by structured form inputs).
+  * In-tool organizer deletion-request forms, `deletion_requested`/`deletion_reason` columns, or internal request review queues (organizers submit deletion requests externally on a linked Meta-Wiki page, and Tool Admins execute soft-delete/restore/purge in `/admin`).
+  * Submitting or syncing runtime database records (`Project` titles/descriptions) to Translatewiki.net.
+  * Auto-generating `wiki_link` URLs from `target_wiki` + `title` when left blank.
+  * On-the-fly machine translation during PDF report rendering or CSV streaming.
+  * Automated scraping of external Wikimedia event pages to populate `wiki_link`, `participants`, or `results`.
+  * Creating SQLite file backups on disk when deleting activities (or adding external search engines / Node.js build pipelines on Toolforge).
 
 ## Alternatives Weighed
 
-* **Synchronous Live XTools Queries vs. Local CentralAuth Snapshots:**
-  - *Synchronous Live Queries:* Rejected due to high latency (5–25s) and fatal Toolforge HTTP 504 gateway timeout risks.
-  - *Local Snapshot with Top-5 Python Sorting & Sync Badge:* Adopted for instant, sub-second page loads with zero external failure modes.
-* **Monolithic Single-Project CSV vs. Participant Roster CSV + Printable Dossier:**
-  - *Monolithic CSV:* Rejected because flattening 1-to-many hierarchical structures into a single spreadsheet row produces corrupt, unusable data.
-  - *Targeted Roster CSV + Printable HTML Report:* Adopted as the optimal combination for spreadsheet analysis and grant reporting.
-* **Server-Side PDF Engines vs. Universal `@media print` Reports:**
-  - *Server-Side Engines (WeasyPrint / ReportLab):* Rejected due to font-bundling complexity for multi-language scripts (Arabic RTL, Chinese, Hindi) and memory overhead on Toolforge.
-  - *Browser `@media print` Templates:* Selected for native typography, zero server memory consumption, and flawless multi-lingual rendering.
+* **Two Translatewiki Subprojects (UI vs. Projects/Communities) vs. `Project.translations` + MinT:**
+  * *Translatewiki for database activities:* Rejected because Translatewiki.net only translates Git-tracked static message files on human review cycles, not runtime database records created by organizers.
+  * *Selected approach:* Use Translatewiki (`banana-i18n` JSON) strictly for static software UI/report messages (Phase 2), and store per-activity multilingual text in `Project.translations` with optional MinT pre-translation reviewed before saving (Phase 3).
+* **In-Tool Organizer Deletion-Request Queue vs. Meta-Wiki Request Page + Admin Soft-Delete:**
+  * *In-tool deletion-request queue (`deletion_requested`, `deletion_reason`):* Rejected to avoid extra database state machines, request-withdrawal/rejection UI, and ticket queue clutter inside Athar.
+  * *Selected approach:* Link to an external Meta-Wiki page for organizer deletion requests (matching standard Wikimedia tool workflows) and limit in-tool soft-delete, restore, and permanent purge actions strictly to Tool Admins in `/admin`.
+* **Full Single-Release Bundle vs. Three-Phase Rollout:**
+  * *Single release:* Rejected due to high schema, regression, and maintenance risk in a ~1,800-line codebase lacking Alembic and JS tests.
+  * *Selected approach:* Split into three sequential phases (Phase 1: Core DB/Admin/Discovery -> Phase 2: Translatewiki i18n + RTL/LTR -> Phase 3: MinT Activity Translations + Dark/Light Theme).
+* **Raw `db.JSON` Array for `tags` vs. Normalized `project_tags` Table:**
+  * *Raw `db.JSON` array:* Rejected because SQLite and MariaDB ToolsDB lack portable JSON array indexing and filtering, forcing full-table Python scans as activities grow.
+  * *Selected approach:* Store separated `tags` in a normalized `project_tags` association table for fast, cross-dialect SQL filtering.
+* **Auto-Generating `wiki_link` from `target_wiki` + `title` vs. Optional Validated `wiki_link`:**
+  * *Auto-generation:* Rejected because descriptive titles rarely match exact on-wiki page titles or namespaces, producing broken redlinks and invalid wikitext syntax (`commons:Title`) in `<a href>`.
+  * *Selected approach:* Keep `wiki_link` optional (recommended) and validate full `https://` URLs against Wikimedia project, `wmcloud.org`, `wmflabs.org`, and `toolforge.org` domains.
+* **Merging Campaigns and Tags vs. Separate `campaign` and `tags` Fields:**
+  * *Merged single input:* Rejected because recurring cross-wiki campaigns (`Wiki Loves Monuments`, `1Lib1Ref`) fragment across inconsistent spellings and mix with ad-hoc topic keywords.
+  * *Selected approach:* Keep `campaign` (searchable cross-wiki presets + custom) and `tags` (multi-chip keywords) as separate fields, independent of `project_type`.
+* **Immutable Community `slug` vs. Admin-Editable `slug`:**
+  * *Immutable `slug`:* Rejected so Admins can fix typos or rename community URLs inside `/admin` without manual SQL edits.
+  * *Selected approach:* Allow Admins to edit any `Community` field including `slug` (safe for database integrity because FKs reference `communities.id`), enforced with `slugify`, uniqueness, and `RESERVED_SLUGS` checks.
+* **On-the-Fly Translation During Report Export vs. Stored Pre-Reviewed Translations:**
+  * *On-the-fly translation:* Rejected because outbound network calls during export violate Athar's local-DB report invariant, risk worker timeouts on Toolforge, and insert unreviewed MT errors into official affiliate reports.
+  * *Selected approach:* Pre-translate and review in the activity form before save; render reports strictly from local database fields with primary-language fallback.
+* **Copying SQLite Database Files on Delete vs. Database Soft-Delete Flags:**
+  * *File-level SQLite backups:* Rejected because production runs on Toolforge ToolsDB MariaDB (not SQLite), copying files creates concurrency conflicts and disk bloat, and restores cannot target single activities cleanly.
+  * *Selected approach:* Database soft-delete lifecycle (`is_deleted`, `deleted_at`, `deleted_by`) managed by Tool Admins in `/admin`.
 
 ## Key Decisions & Staging for Next Steps
 
-1. **Phase 1: Database Migration & Schema Extension**:
-   - Create and run migration script for `Project.participants` and `Project.results`.
-   - Add database indices on `Project.lead_organizer` and `StatSnapshot(user_id, recorded_at)`.
-2. **Phase 2: Global Contributor Profile (`/user/<username>`)**:
-   - Implement route, controller, and template displaying CentralAuth stats, sync badge, top-5 wikis, and multi-group project history.
-3. **Phase 3: Form Updates for Participants & Results**:
-   - Update `project_form.html`, `create_project`, and `edit_project` with non-technical text inputs, structured result fields, and Bleach sanitization.
-4. **Phase 4: Symmetrical Dual-Tier Export Implementation**:
-   - Create `base_report.html` and printable views for Level 1, 2, and 3.
-   - Implement CSV endpoints with formula escaping and generator-based streaming.
+All major product and architectural decisions are locked for `/egm-draft`. Only minor implementation specifics remain to be formalized during drafting:
+* Exact URL or config variable for the external Meta-Wiki deletion-request page linked from project pages.
+* Whether editing a community's `slug` in `/admin` immediately switches routes to `/<new-slug>/` or stores optional redirect history for old bookmarks.
+* Exact `ALLOWED_WIKIMEDIA_DOMAINS` split between `target_wiki` (Wikimedia content projects) and `wiki_link` (content projects + `wmcloud.org`, `wmflabs.org`, `toolforge.org`).
+
+### Phased Design & Implementation Roadmap
+1. **Phase 1 (`/egm-draft` Target 1) — Core Schema, `/admin` Governance & Global Discovery:**
+   * Clean up duplicate date/status controls (`project_form.html`, `project_detail.html`) and `"Canceled"` status clobbering.
+   * Add `User.is_admin`, `Project.wiki_link` (`String(1024)`), `Project.campaign`, `project_tags` join table, and `Project.is_deleted`/`deleted_at`/`deleted_by`, plus `scripts/migrate_v3.py`.
+   * Fix OAuth `User` upsert, `MOCK_AUTH` safety guards, `@admin_required`, global active-project query scoping, and `/admin` console (Admin management, Admin-only community add/edit including `slug`, Admin project edit, and soft-delete/restore/purge + external Meta-Wiki deletion request link).
+   * Add `"activities"` and new top-level routes to `RESERVED_SLUGS`, expose header nav on `/`, redesign `index.html` with bounded running-activity previews + GET search bar, build global `/activities`, and unify `/api/projects`, `query_utils.py`, and `filters.js` (with RBAC/CSRF/soft-delete pytest coverage).
+2. **Phase 2 (`/egm-draft` Target 2) — Translatewiki `banana-i18n` Localization & RTL/LTR Layout:**
+   * Build `i18n/ui/` and `i18n/reports/` (`en.json`, `ar.json`, `qqq.json`) with Python + JS interpolation and CLDR pluralization, top-header language switcher, `?lang=` report/CSV overrides, CSS logical properties in `codex.style.css`, and fix `reports/base_report.html`'s missing `css/main.css` reference.
+3. **Phase 3 (`/egm-draft` Target 3) — Multilingual Activity Content (MinT) & Dynamic Dark/Light Theme:**
+   * Add `Project.primary_lang` and `Project.translations` JSON, Commons-style `"+ Add in another language"` form workflow, CSRF-protected rate-limited Wikimedia MinT proxy with `bleach.clean` sanitization, and `:root[data-theme="light|dark"]` CSS custom properties with blocking `<head>` script and Chart.js re-theming (printable reports pinned to light mode).

@@ -1,139 +1,89 @@
 import csv
 import io
 import re
-import calendar
-from datetime import datetime, date
-from flask import Blueprint, jsonify, request, Response, session, stream_with_context
-from app.models import Community, Project, User, StatSnapshot, CommunityMember
-from app.oauth import member_required, project_editor_required, get_current_user
-from app import db
+import time
+from urllib.parse import urlparse
+
+from flask import Blueprint, Response, current_app, jsonify, request, session, stream_with_context
+import requests
 from sqlalchemy import func
-import bleach
-from app.wiki_utils import normalize_wiki_target
-from app.query_utils import filter_projects_by_date, filter_projects_by_status, sanitize_csv_cell, normalize_username
+from sqlalchemy.orm import defer, joinedload, selectinload
+from werkzeug.datastructures import MultiDict
+
+from app import csrf, db
+from app.i18n import _, _r, activate_report_lang_from_request
+from app.models import Community, CommunityMember, Project, User
+from app.oauth import get_current_user, member_required, project_editor_required
+from app.query_utils import (
+    active_projects_query,
+    filter_projects,
+    filter_projects_by_status,
+    get_latest_snapshots_map,
+    get_latest_snapshots_total,
+    normalize_username,
+    sanitize_csv_cell,
+    sync_project_tags,
+)
+from app.wiki_utils import (
+    LANG_CODE_REGEX,
+    parse_and_validate_project_payload,
+    verify_wikimedia_username,
+)
 
 api_bp = Blueprint("api", __name__)
 
 
-def _filter_projects_by_date(query, args):
-    """Filter Project query by year, month, or custom date range."""
-    filter_type = args.get("filter_type")
-    year_arg = args.get("year")
-    month_arg = args.get("month")
-    start_arg = args.get("start_date") or args.get("from_date")
-    end_arg = args.get("end_date") or args.get("to_date")
+def _enforce_csrf():
+    if current_app.config.get("WTF_CSRF_ENABLED", True):
+        csrf.protect()
 
-    start_date = None
-    end_date = None
-
-    if filter_type == "year" or (year_arg and not month_arg and not start_arg and not filter_type):
-        if year_arg:
-            try:
-                y = int(year_arg)
-                start_date = date(y, 1, 1)
-                end_date = date(y, 12, 31)
-            except (ValueError, TypeError):
-                pass
-    elif filter_type == "month" or (month_arg and not start_arg and not filter_type):
-        try:
-            if month_arg and "-" in str(month_arg):
-                parts = str(month_arg).split("-")
-                y = int(parts[0])
-                m = int(parts[1])
-            else:
-                y = int(year_arg) if year_arg else datetime.utcnow().year
-                m = int(month_arg)
-            if 1 <= m <= 12:
-                _, last_day = calendar.monthrange(y, m)
-                start_date = date(y, m, 1)
-                end_date = date(y, m, last_day)
-        except (ValueError, TypeError):
-            pass
-    elif filter_type == "custom" or start_arg or end_arg:
-        if start_arg:
-            try:
-                start_date = datetime.strptime(start_arg.strip(), "%Y-%m-%d").date()
-            except ValueError:
-                pass
-        if end_arg:
-            try:
-                end_date = datetime.strptime(end_arg.strip(), "%Y-%m-%d").date()
-            except ValueError:
-                pass
-
-    if start_date:
-        query = query.filter(
-            db.or_(
-                db.and_(Project.start_date.isnot(None), Project.start_date >= start_date),
-                db.and_(Project.start_date.is_(None), Project.created_at >= datetime.combine(start_date, datetime.min.time()))
-            )
-        )
-    if end_date:
-        query = query.filter(
-            db.or_(
-                db.and_(Project.start_date.isnot(None), Project.start_date <= end_date),
-                db.and_(Project.start_date.is_(None), Project.created_at <= datetime.combine(end_date, datetime.max.time()))
-            )
-        )
-
-    return query, start_date, end_date
 
 def get_request_data():
     """Extract request data supporting both JSON payloads and Form submissions."""
     if request.is_json:
-        return request.get_json() or {}
+        return request.get_json(silent=True) or {}
     return request.form.to_dict()
+
 
 # ----------------------------------------------------------------------
 # Global Endpoints
 # ----------------------------------------------------------------------
 
+
 @api_bp.route("/communities", methods=["GET"])
 def get_communities():
-    communities = Community.query.all()
+    communities = Community.query.order_by(Community.name.asc()).all()
     return jsonify([community.to_dict() for community in communities]), 200
+
 
 @api_bp.route("/stats", methods=["GET"])
 def get_stats():
     total_members = User.query.filter_by(is_member=True).count()
-    total_projects = Project.query.count()
-    
-    latest_snapshots = StatSnapshot.query.order_by(StatSnapshot.recorded_at.desc()).limit(100).all()
-    total_edits = sum(s.total_edits for s in latest_snapshots)
+    total_projects = active_projects_query().count()
+    all_user_ids = [uid for (uid,) in db.session.query(User.id).all()]
+    total_edits = get_latest_snapshots_total(all_user_ids)
 
+    return jsonify(
+        {
+            "total_members": total_members,
+            "total_projects": total_projects,
+            "total_edits": total_edits,
+        }
+    ), 200
 
-    return jsonify({
-        "total_members": total_members,
-        "total_projects": total_projects,
-        "total_edits": total_edits
-    }), 200
 
 @api_bp.route("/projects", methods=["GET"])
 def list_projects():
-    status = request.args.get("status")
-    project_type = request.args.get("type") or request.args.get("project_type")
-    target_wiki = request.args.get("target_wiki")
-    
-    query = Project.query
-    if status:
-        query = query.filter_by(status=status)
-    if project_type:
-        query = query.filter_by(project_type=project_type)
-    if target_wiki:
-        try:
-            norm_code, norm_url = normalize_wiki_target(target_wiki)
-            from urllib.parse import urlparse
-            norm_domain = urlparse(norm_url).netloc
-            query = query.filter(
-                (Project.target_wiki == target_wiki) |
-                (Project.target_wiki == norm_code) |
-                (Project.target_wiki == norm_domain)
-            )
-        except ValueError:
-            query = query.filter_by(target_wiki=target_wiki)
-        
+    lang = (request.args.get("lang") or "").strip() or None
+    query = active_projects_query().options(
+        joinedload(Project.community),
+        selectinload(Project.tags_rel),
+        defer(Project.translations),
+    )
+    query = filter_projects(query, request.args)
     projects = query.order_by(Project.created_at.desc()).all()
-    return jsonify([p.to_dict() for p in projects]), 200
+    return jsonify([p.to_dict(lang=lang) for p in projects]), 200
+
 
 @api_bp.route("/export", methods=["GET"])
 def export_csv():
@@ -145,103 +95,103 @@ def export_csv():
         return exp_community_projects(first_comm.slug)
     return jsonify({"error": "يرجى تحديد المجتمع لتصدير التقرير الخاص به."}), 400
 
+
 # ----------------------------------------------------------------------
 # Scoped Community Endpoints
 # ----------------------------------------------------------------------
 
+
 @api_bp.route("/<string:slug>/stats", methods=["GET"])
 def slug_Stat(slug):
     community = Community.query.filter_by(slug=slug).first()
-
     if not community:
         return jsonify({"error": "Community not found"}), 404
-        
-    count_community_member = CommunityMember.query.filter_by(community_id=community.id).count()
-    count_project = Project.query.filter_by(community_id=community.id).count()
-    
-    # Calculate aggregate edits across community members' latest snapshots
-    member_user_ids = [cm.user_id for cm in community.members]
-    total_edits = 0
-    if member_user_ids:
-        for uid in member_user_ids:
-            latest = StatSnapshot.query.filter_by(user_id=uid).order_by(StatSnapshot.recorded_at.desc()).first()
-            if latest:
-                total_edits += latest.total_edits
-    
 
     count_community_member = (
         db.session.query(func.count(CommunityMember.user_id))
         .filter(CommunityMember.community_id == community.id)
         .scalar()
+        or 0
     )
 
     count_project = (
         db.session.query(func.count(Project.id))
-        .filter(Project.community_id == community.id)
+        .filter(Project.community_id == community.id, Project.is_deleted.is_(False))
         .scalar()
+        or 0
     )
+
+    member_user_ids = [
+        uid
+        for (uid,) in db.session.query(CommunityMember.user_id)
+        .filter(CommunityMember.community_id == community.id)
+        .all()
+    ]
+    total_edits = get_latest_snapshots_total(member_user_ids)
 
     activity_rows = (
         db.session.query(
             Project.project_type,
-            func.count(Project.id).label("total")
+            func.count(Project.id).label("total"),
         )
-        .filter(Project.community_id == community.id)
+        .filter(Project.community_id == community.id, Project.is_deleted.is_(False))
         .group_by(Project.project_type)
         .all()
     )
+    activities_by_type = {project_type: total for project_type, total in activity_rows}
 
-    activities_by_type = {
-        project_type: total
-        for project_type, total in activity_rows
-    }
-    community_members = CommunityMember.query.filter_by(
-        community_id=community.id
-    ).all()
+    return jsonify(
+        {
+            "community": community.name,
+            "slug": community.slug,
+            "total_members": count_community_member,
+            "total_projects": count_project,
+            "total_edits": total_edits,
+            # Backward-compatible keys
+            "community_name": community.name,
+            "total_community_member": count_community_member,
+            "total_project_member": count_project,
+            "total_edits_member_comm": total_edits,
+            "activities_by_type": activities_by_type,
+        }
+    ), 200
 
-    member_ids = [cm.user_id for cm in community_members]
 
-    total_edits_member_comm = total_edits
-    return jsonify({
-        "community": community.name,
-        "slug": community.slug,
-        "total_members": count_community_member,
-        "total_projects": count_project,
-        "total_edits": total_edits,
-        # Backward-compatible keys for earlier code:
-        "community_name": community.name,
-        "total_community_member": count_community_member,
-        "total_project_member": count_project,
-        "total_edits_member_comm": total_edits_member_comm,
-        "activities_by_type": activities_by_type
-    }), 200
-
-    
 @api_bp.route("/<string:slug>/members", methods=["GET"])
 def list_members(slug):
     community = Community.query.filter_by(slug=slug).first()
     if not community:
         return jsonify({"error": "Community not found"}), 404
-        
-    community_members = CommunityMember.query.filter_by(community_id=community.id).all()
+
+    community_members = (
+        CommunityMember.query.options(joinedload(CommunityMember.user))
+        .filter_by(community_id=community.id)
+        .all()
+    )
+    user_ids = [cm.user_id for cm in community_members if cm.user_id]
+    snapshots_map = get_latest_snapshots_map(user_ids)
+
     members = []
     for cm in community_members:
         member = cm.user
         if not member:
             continue
-        last_snapshot = StatSnapshot.query.filter_by(user_id=member.id).order_by(StatSnapshot.recorded_at.desc()).first()
-        members.append({
-            "id": member.id,
-            "username": member.username,
-            "is_member": member.is_member,
-            "role": cm.role,
-            "verified": cm.verified,
-            "added_at": cm.added_at.isoformat() if cm.added_at else None,
-            "first_seen": member.first_seen.isoformat() if member.first_seen else None,
-            "last_synced": member.last_synced.isoformat() if member.last_synced else None,
-            "total_edits": last_snapshot.total_edits if last_snapshot else 0
-        })
+        last_snapshot = snapshots_map.get(member.id)
+        members.append(
+            {
+                "id": member.id,
+                "username": member.username,
+                "is_member": member.is_member,
+                "role": cm.role,
+                "verified": cm.verified,
+                "added_at": cm.added_at.isoformat() if cm.added_at else None,
+                "first_seen": member.first_seen.isoformat() if member.first_seen else None,
+                "last_synced": member.last_synced.isoformat() if member.last_synced else None,
+                "total_edits": last_snapshot.total_edits if last_snapshot else 0,
+            }
+        )
     return jsonify(members), 200
+
 
 @api_bp.route("/<string:slug>/projects", methods=["GET"])
 def list_slug_project(slug):
@@ -249,102 +199,45 @@ def list_slug_project(slug):
     if not community:
         return jsonify({"error": "Community not found"}), 404
 
-    status = request.args.get("status")
-    project_type = request.args.get("type") or request.args.get("project_type")
-    target_wiki = request.args.get("target_wiki")
+    lang = (request.args.get("lang") or "").strip() or None
+    scoped_args = request.args.to_dict(flat=False)
+    scoped_args.pop("community", None)
 
-    query = Project.query.filter_by(community_id=community.id)
-    if status:
-        query = query.filter_by(status=status)
-    if project_type:
-        query = query.filter_by(project_type=project_type)
-    if target_wiki:
-        try:
-            norm_code, norm_url = normalize_wiki_target(target_wiki)
-            from urllib.parse import urlparse
-            norm_domain = urlparse(norm_url).netloc
-            query = query.filter(
-                (Project.target_wiki == target_wiki) |
-                (Project.target_wiki == norm_code) |
-                (Project.target_wiki == norm_domain)
-            )
-        except ValueError:
-            query = query.filter_by(target_wiki=target_wiki)
-
-    query, _, _ = _filter_projects_by_date(query, request.args)
-    query = filter_projects_by_status(query, request.args)
-
+    query = (
+        active_projects_query()
+        .filter(Project.community_id == community.id)
+        .options(
+            joinedload(Project.community),
+            selectinload(Project.tags_rel),
+            defer(Project.translations),
+        )
+    )
+    query = filter_projects(query, MultiDict(scoped_args))
     projects = query.order_by(Project.created_at.desc()).all()
-    return jsonify([p.to_dict() for p in projects]), 200
+    return jsonify([p.to_dict(lang=lang) for p in projects]), 200
+
 
 @api_bp.route("/<string:slug>/projects", methods=["POST"])
 @api_bp.route("/<string:slug>/project", methods=["POST"])
 @member_required
 def create_projetct(slug):
+    _enforce_csrf()
     community = Community.query.filter_by(slug=slug).first()
     if not community:
         return jsonify({"error": "Community not found"}), 404
-        
+
     data = get_request_data()
-    title = (data.get("title") or "").strip()
-    if not title:
-        return jsonify({"error": "Project title is required."}), 400
-
-    raw_description = (data.get("description") or "").strip()
-    raw_type = (data.get("project_type") or "Workshop").strip()
-    custom_type = (data.get("custom_project_type") or "").strip()
-    if raw_type == "Other" and custom_type:
-        project_type = custom_type
-    elif raw_type == "Other":
-        project_type = "Other"
-    else:
-        project_type = raw_type or "Workshop"
-
-    raw_target_wiki = data.get("target_wiki", "arwiki")
     try:
-        target_wiki, _ = normalize_wiki_target(raw_target_wiki)
+        parsed = parse_and_validate_project_payload(
+            data,
+            existing_project=None,
+            require_dates=False,
+            date_calc_when_not_canceled=False,
+            partial=False,
+        )
     except ValueError as err:
         return jsonify({"error": str(err)}), 400
 
-    status = data.get("status", "In Progress")
-
-    safe_description = bleach.clean(
-        raw_description,
-        tags=["p", "b", "i", "strong", "em", "ul", "ol", "li", "a", "br"],
-        attributes={"a": ["href", "title"]},
-        strip=True
-    )
-
-    co_orgs_raw = data.get("co_organizers", [])
-    if isinstance(co_orgs_raw, str):
-        co_organizers = [u.strip() for u in co_orgs_raw.split(",") if u.strip()]
-    elif isinstance(co_orgs_raw, list):
-        co_organizers = [str(u).strip() for u in co_orgs_raw if str(u).strip()]
-    else:
-        co_organizers = []
-
-    is_contest = bool(data.get("is_contest", False))
-    jury_raw = data.get("jury_members", [])
-    if isinstance(jury_raw, str):
-        jury_members = [j.strip() for j in jury_raw.split(",") if j.strip()] if is_contest else []
-    elif isinstance(jury_raw, list):
-        jury_members = [str(j).strip() for j in jury_raw if str(j).strip()] if is_contest else []
-    else:
-        jury_members = []
-
-    participants_raw = data.get("participants", [])
-    if isinstance(participants_raw, str):
-        participants = [p.strip() for p in re.split(r'[\r\n,]+', participants_raw) if p.strip()]
-    elif isinstance(participants_raw, list):
-        participants = [str(p).strip() for p in participants_raw if str(p).strip()]
-    else:
-        participants = []
-
-    results = data.get("results")
-    if results and not isinstance(results, dict):
-        results = None
-
-    # Current user identification (handles OAuth session and MOCK_AUTH)
     curr_user = get_current_user()
     if curr_user and isinstance(curr_user, dict):
         lead_user = curr_user.get("username", "MoroccoVolunteer")
@@ -353,173 +246,122 @@ def create_projetct(slug):
     else:
         lead_user = session.get("username", "MoroccoVolunteer")
 
-    start_date_val = None
-    end_date_val = None
-    if data.get("start_date"):
-        try:
-            start_date_val = datetime.strptime(data["start_date"], "%Y-%m-%d").date()
-        except ValueError:
-            pass
-    if data.get("end_date"):
-        try:
-            end_date_val = datetime.strptime(data["end_date"], "%Y-%m-%d").date()
-        except ValueError:
-            pass
-
-    raw_status = data.get("status")
-    from app.wiki_utils import determine_project_status
-    status = determine_project_status(start_date_val, end_date_val, raw_status)
-        
     new_project = Project(
         community_id=community.id,
-        title=title,
-        description=safe_description,
-        project_type=project_type,
-        target_wiki=target_wiki,
-        status=status,
-        start_date=start_date_val,
-        end_date=end_date_val,
+        title=parsed["title"],
+        description=parsed["description"],
+        project_type=parsed["project_type"],
+        target_wiki=parsed["target_wiki"],
+        wiki_link=parsed["wiki_link"],
+        campaign=parsed["campaign"],
+        primary_lang=parsed["primary_lang"],
+        translations=parsed["translations"],
+        status=parsed["status"],
+        start_date=parsed["start_date"],
+        end_date=parsed["end_date"],
         lead_organizer=lead_user,
-        co_organizers=co_organizers,
-        is_contest=is_contest,
-        jury_members=jury_members,
-        participants=participants,
-        results=results
+        co_organizers=parsed["co_organizers"],
+        is_contest=parsed["is_contest"],
+        jury_members=parsed["jury_members"],
+        participants=parsed["participants"],
+        results=parsed["results"],
     )
     db.session.add(new_project)
+    db.session.flush()
+    sync_project_tags(new_project, parsed["tags"], replace=True)
     db.session.commit()
-    
-    return jsonify({
-        "message": "Project created successfully",
-        "project": new_project.to_dict()
-    }), 201
+
+    return jsonify(
+        {
+            "message": "Project created successfully",
+            "project": new_project.to_dict(),
+        }
+    ), 201
+
 
 @api_bp.route("/<string:slug>/projects/<int:project_id>", methods=["GET"])
 @api_bp.route("/projects/<int:project_id>", methods=["GET"])
 def get_project(project_id, slug=None):
+    lang = (request.args.get("lang") or "").strip() or None
+    q = active_projects_query().filter(Project.id == project_id)
     if slug:
         community = Community.query.filter_by(slug=slug).first()
         if not community:
             return jsonify({"error": "Community not found"}), 404
-        project = Project.query.filter_by(id=project_id, community_id=community.id).first_or_404()
-    else:
-        project = Project.query.get_or_404(project_id)
-    return jsonify(project.to_dict()), 200
+        q = q.filter(Project.community_id == community.id)
+
+    project = q.first_or_404()
+    return jsonify(project.to_dict(lang=lang)), 200
+
 
 @api_bp.route("/<string:slug>/projects/<int:project_id>", methods=["PUT"])
 @api_bp.route("/projects/<int:project_id>", methods=["PUT"])
 @project_editor_required
 def update_project(project_id, slug=None):
+    _enforce_csrf()
+    q = active_projects_query().filter(Project.id == project_id)
     if slug:
         community = Community.query.filter_by(slug=slug).first()
         if not community:
             return jsonify({"error": "Community not found"}), 404
-        project = Project.query.filter_by(id=project_id, community_id=community.id).first_or_404()
-    else:
-        project = Project.query.get_or_404(project_id)
+        q = q.filter(Project.community_id == community.id)
 
+    project = q.first_or_404()
     data = get_request_data()
 
-    if "title" in data:
-        title = (data["title"] or "").strip()
-        if not title:
-            return jsonify({"error": "Title cannot be empty."}), 400
-        project.title = title
-
-    if "description" in data:
-        project.description = bleach.clean(
-            data["description"].strip(),
-            tags=["p", "b", "i", "strong", "em", "ul", "ol", "li", "a", "br"],
-            attributes={"a": ["href", "title"]},
-            strip=True
+    try:
+        parsed = parse_and_validate_project_payload(
+            data,
+            existing_project=project,
+            require_dates=False,
+            date_calc_when_not_canceled=False,
+            partial=True,
         )
+    except ValueError as err:
+        return jsonify({"error": str(err)}), 400
 
-    if "project_type" in data or "custom_project_type" in data:
-        raw_type = (data.get("project_type") or project.project_type).strip()
-        custom_type = (data.get("custom_project_type") or "").strip()
-        if raw_type == "Other" and custom_type:
-            project.project_type = custom_type
-        else:
-            project.project_type = raw_type or project.project_type
+    for attr in (
+        "title",
+        "description",
+        "project_type",
+        "target_wiki",
+        "wiki_link",
+        "campaign",
+        "primary_lang",
+        "translations",
+        "start_date",
+        "end_date",
+        "status",
+        "is_contest",
+        "co_organizers",
+        "jury_members",
+        "participants",
+        "results",
+    ):
+        if attr in parsed:
+            setattr(project, attr, parsed[attr])
 
-    if "target_wiki" in data:
-        raw_target_wiki = (data.get("target_wiki") or "").strip()
-        try:
-            target_wiki, _ = normalize_wiki_target(raw_target_wiki)
-            project.target_wiki = target_wiki
-        except ValueError as err:
-            return jsonify({"error": str(err)}), 400
-
-    if "is_contest" in data:
-        project.is_contest = bool(data["is_contest"])
-
-    if "co_organizers" in data:
-        co_orgs_raw = data["co_organizers"]
-        if isinstance(co_orgs_raw, str):
-            project.co_organizers = [u.strip() for u in co_orgs_raw.split(",") if u.strip()]
-        elif isinstance(co_orgs_raw, list):
-            project.co_organizers = [str(u).strip() for u in co_orgs_raw if str(u).strip()]
-
-    if "jury_members" in data:
-        jury_raw = data["jury_members"]
-        if isinstance(jury_raw, str):
-            project.jury_members = [j.strip() for j in jury_raw.split(",") if j.strip()] if project.is_contest else []
-        elif isinstance(jury_raw, list):
-            project.jury_members = [str(j).strip() for j in jury_raw if str(j).strip()] if project.is_contest else []
-
-    if "start_date" in data:
-        if data["start_date"]:
-            try:
-                project.start_date = datetime.strptime(data["start_date"], "%Y-%m-%d").date()
-            except ValueError:
-                pass
-        else:
-            project.start_date = None
-
-    if "end_date" in data:
-        if data["end_date"]:
-            try:
-                project.end_date = datetime.strptime(data["end_date"], "%Y-%m-%d").date()
-            except ValueError:
-                pass
-        else:
-            project.end_date = None
-
-    if "status" in data:
-        raw_status = data["status"]
-        from app.wiki_utils import determine_project_status
-        project.status = determine_project_status(project.start_date, project.end_date, raw_status)
-    elif "start_date" in data or "end_date" in data:
-        from app.wiki_utils import determine_project_status
-        project.status = determine_project_status(project.start_date, project.end_date, "auto")
-
-    if "participants" in data:
-        p_raw = data["participants"]
-        if isinstance(p_raw, str):
-            project.participants = [p.strip() for p in re.split(r'[\r\n,]+', p_raw) if p.strip()]
-        elif isinstance(p_raw, list):
-            project.participants = [str(p).strip() for p in p_raw if str(p).strip()]
-        elif p_raw is None:
-            project.participants = None
-
-    if "results" in data:
-        r_val = data["results"]
-        project.results = r_val if isinstance(r_val, dict) else None
+    if "tags" in parsed:
+        sync_project_tags(project, parsed["tags"], replace=True)
 
     db.session.commit()
-    return jsonify({
-        "message": "Project updated successfully",
-        "project": project.to_dict()
-    }), 200
+    return jsonify(
+        {
+            "message": "Project updated successfully",
+            "project": project.to_dict(),
+        }
+    ), 200
 
 
 @api_bp.route("/projects/<int:project_id>/export", methods=["GET"])
 def export_project_csv(project_id):
-    """
-    Level 1 CSV Export: Streams participant and organizer roster for a single project.
-    Headers: ["اسم المستخدم", "الدور في النشاط", "عنوان النشاط", "المشروع المستهدف", "تاريخ البدء", "تاريخ الانتهاء"]
-    """
-    project = db.session.get(Project, project_id)
+    """Level 1 CSV Export: Streams participant and organizer roster for a single active project."""
+    try:
+        export_lang = activate_report_lang_from_request()
+    except ValueError as err:
+        return jsonify({"error": str(err)}), 400
+
+    project = active_projects_query().filter(Project.id == project_id).first()
     if not project:
         return jsonify({"error": "Project not found"}), 404
 
@@ -527,34 +369,44 @@ def export_project_csv(project_id):
     if export_format != "csv":
         return jsonify({"error": f"Unsupported format '{export_format}'. Only 'csv' is supported."}), 400
 
-    # Eagerly extract roster rows before streaming
+    role_lead = _r("athar-report-role-lead", lang=export_lang)
+    role_co = _r("athar-report-role-co", lang=export_lang)
+    role_jury = _r("athar-report-role-jury", lang=export_lang)
+    role_part = _r("athar-report-role-participant", lang=export_lang)
+
     rows = []
     if project.lead_organizer:
-        rows.append((project.lead_organizer, "منظم رئيسي"))
+        rows.append((project.lead_organizer, role_lead))
     for co in (project.co_organizers or []):
         if co:
-            rows.append((co, "منظم مشارك"))
+            rows.append((co, role_co))
     if project.is_contest:
         for j in (project.jury_members or []):
             if j:
-                rows.append((j, "لجنة تحكيم"))
+                rows.append((j, role_jury))
     for part in (project.participants or []):
         if part:
-            rows.append((part, "مشارك"))
+            rows.append((part, role_part))
 
-    title = project.title
+    title = project.localized_text("title", export_lang)
     target_wiki = project.target_wiki
     start_str = project.start_date.strftime("%Y-%m-%d") if project.start_date else ""
     end_str = project.end_date.strftime("%Y-%m-%d") if project.end_date else ""
     proj_id = project.id
+    headers = [
+        _r("athar-csv-l1-col-username", lang=export_lang),
+        _r("athar-csv-l1-col-role", lang=export_lang),
+        _r("athar-csv-l1-col-title", lang=export_lang),
+        _r("athar-csv-l1-col-wiki", lang=export_lang),
+        _r("athar-csv-l1-col-start", lang=export_lang),
+        _r("athar-csv-l1-col-end", lang=export_lang),
+    ]
 
     def generate_csv():
         output = io.StringIO()
         writer = csv.writer(output)
-        # Yield UTF-8 BOM so Excel opens Arabic text cleanly
-        yield '\ufeff'
+        yield "\ufeff"
 
-        headers = ["اسم المستخدم", "الدور في النشاط", "عنوان النشاط", "المشروع المستهدف", "تاريخ البدء", "تاريخ الانتهاء"]
         writer.writerow(headers)
         yield output.getvalue()
         output.seek(0)
@@ -567,7 +419,7 @@ def export_project_csv(project_id):
                 sanitize_csv_cell(title),
                 sanitize_csv_cell(target_wiki),
                 sanitize_csv_cell(start_str),
-                sanitize_csv_cell(end_str)
+                sanitize_csv_cell(end_str),
             ]
             writer.writerow(clean_row)
             yield output.getvalue()
@@ -578,17 +430,19 @@ def export_project_csv(project_id):
     return Response(
         stream_with_context(generate_csv()),
         mimetype="text/csv; charset=utf-8",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 
 @api_bp.route("/users/<string:username>/export", methods=["GET"])
 @api_bp.route("/user/<string:username>/export", methods=["GET"])
 def export_user_projects_csv(username):
-    """
-    Level 3 CSV Export: Streams contributor activity history across all projects.
-    Headers: ["معرف النشاط", "عنوان النشاط", "المجتمع التابع له", "الدور", "الحالة", "المشروع المستهدف", "تاريخ البدء", "تاريخ الانتهاء"]
-    """
+    """Level 3 CSV Export: Streams contributor activity history across active projects."""
+    try:
+        export_lang = activate_report_lang_from_request()
+    except ValueError as err:
+        return jsonify({"error": str(err)}), 400
+
     clean_username = normalize_username(username)
     if not clean_username:
         return jsonify({"error": "Username is required"}), 400
@@ -597,44 +451,63 @@ def export_user_projects_csv(username):
     if export_format != "csv":
         return jsonify({"error": f"Unsupported format '{export_format}'. Only 'csv' is supported."}), 400
 
+    role_org = _r("athar-report-role-organizer", lang=export_lang)
+    role_jury = _r("athar-report-role-jury", lang=export_lang)
+    role_part = _r("athar-report-role-participant", lang=export_lang)
+    general_label = _("athar-field-general", lang=export_lang)
+
     norm_lower = clean_username.lower()
-    query = Project.query
-    query = filter_projects_by_status(query, request.args)
+    query = filter_projects_by_status(
+        active_projects_query().options(joinedload(Project.community)),
+        request.args,
+    )
     candidate_projects = query.order_by(Project.start_date.desc(), Project.created_at.desc()).all()
 
-    # Eagerly extract records to prevent DetachedInstanceError during streaming
     user_rows = []
     for p in candidate_projects:
         role = None
-        if (p.lead_organizer and p.lead_organizer.strip().lower() == norm_lower) or \
-           any(co and co.strip().lower() == norm_lower for co in (p.co_organizers or [])):
-            role = "منظم"
-        elif any(j and j.strip().lower() == norm_lower for j in (p.jury_members or [])):
-            role = "لجنة تحكيم"
-        elif any(part and part.strip().lower() == norm_lower for part in (p.participants or [])):
-            role = "مشارك"
+        if (p.lead_organizer and normalize_username(p.lead_organizer).lower() == norm_lower) or any(
+            co and normalize_username(co).lower() == norm_lower for co in (p.co_organizers or [])
+        ):
+            role = role_org
+        elif any(j and normalize_username(j).lower() == norm_lower for j in (p.jury_members or [])):
+            role = role_jury
+        elif any(part and normalize_username(part).lower() == norm_lower for part in (p.participants or [])):
+            role = role_part
 
         if role:
-            comm_name = p.community.name if p.community else "عام"
+            comm_name = p.community.name if p.community else general_label
             start_str = p.start_date.strftime("%Y-%m-%d") if p.start_date else ""
             end_str = p.end_date.strftime("%Y-%m-%d") if p.end_date else ""
-            user_rows.append([
-                sanitize_csv_cell(p.id),
-                sanitize_csv_cell(p.title),
-                sanitize_csv_cell(comm_name),
-                sanitize_csv_cell(role),
-                sanitize_csv_cell(p.status),
-                sanitize_csv_cell(p.target_wiki),
-                sanitize_csv_cell(start_str),
-                sanitize_csv_cell(end_str)
-            ])
+            user_rows.append(
+                [
+                    sanitize_csv_cell(p.id),
+                    sanitize_csv_cell(p.localized_text("title", export_lang)),
+                    sanitize_csv_cell(comm_name),
+                    sanitize_csv_cell(role),
+                    sanitize_csv_cell(p.t_status(export_lang)),
+                    sanitize_csv_cell(p.target_wiki),
+                    sanitize_csv_cell(start_str),
+                    sanitize_csv_cell(end_str),
+                ]
+            )
+
+    headers = [
+        _r("athar-csv-l3-col-id", lang=export_lang),
+        _r("athar-csv-l3-col-title", lang=export_lang),
+        _r("athar-csv-l3-col-community", lang=export_lang),
+        _r("athar-csv-l3-col-role", lang=export_lang),
+        _r("athar-csv-l3-col-status", lang=export_lang),
+        _r("athar-csv-l3-col-wiki", lang=export_lang),
+        _r("athar-csv-l3-col-start", lang=export_lang),
+        _r("athar-csv-l3-col-end", lang=export_lang),
+    ]
 
     def generate_csv():
         output = io.StringIO()
         writer = csv.writer(output)
-        yield '\ufeff'
+        yield "\ufeff"
 
-        headers = ["معرف النشاط", "عنوان النشاط", "المجتمع التابع له", "الدور", "الحالة", "المشروع المستهدف", "تاريخ البدء", "تاريخ الانتهاء"]
         writer.writerow(headers)
         yield output.getvalue()
         output.seek(0)
@@ -650,15 +523,18 @@ def export_user_projects_csv(username):
     return Response(
         stream_with_context(generate_csv()),
         mimetype="text/csv; charset=utf-8",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 
 @api_bp.route("/<string:slug>/export", methods=["GET"])
 def exp_community_projects(slug):
-    """
-    Level 2 CSV Export: Streams filtered community projects with formula injection protection.
-    """
+    """Level 2 CSV Export: Streams filtered active community projects with formula protection."""
+    try:
+        export_lang = activate_report_lang_from_request()
+    except ValueError as err:
+        return jsonify({"error": str(err)}), 400
+
     community = Community.query.filter_by(slug=slug).first()
     if not community:
         return jsonify({"error": "Community not found"}), 404
@@ -667,59 +543,65 @@ def exp_community_projects(slug):
     if export_format != "csv":
         return jsonify({"error": f"Unsupported format '{export_format}'. Only 'csv' is supported."}), 400
 
-    status = request.args.get("status")
-    project_type = request.args.get("type") or request.args.get("project_type")
-    target_wiki = request.args.get("target_wiki")
+    scoped_args = request.args.to_dict(flat=False)
+    scoped_args.pop("community", None)
 
-    query = Project.query.filter_by(community_id=community.id)
-    if status:
-        query = query.filter_by(status=status)
-    if project_type:
-        query = query.filter_by(project_type=project_type)
-    if target_wiki:
-        query = query.filter_by(target_wiki=target_wiki)
-
-    query, start_date, end_date = filter_projects_by_date(query, request.args)
-    query = filter_projects_by_status(query, request.args)
+    query = (
+        active_projects_query()
+        .filter(Project.community_id == community.id)
+        .options(selectinload(Project.tags_rel))
+    )
+    query = filter_projects(query, MultiDict(scoped_args))
     projects = query.order_by(Project.created_at.desc()).all()
 
-    # Eagerly extract records to prevent DetachedInstanceError during streaming
+    yes_label = _("athar-bool-yes", lang=export_lang)
+    no_label = _("athar-bool-no", lang=export_lang)
+
     project_rows = []
     for p in projects:
-        project_rows.append([
-            sanitize_csv_cell(p.id),
-            sanitize_csv_cell(p.title),
-            sanitize_csv_cell(p.project_type),
-            sanitize_csv_cell(p.target_wiki),
-            sanitize_csv_cell(p.target_wiki_url),
-            sanitize_csv_cell(p.status),
-            sanitize_csv_cell(", ".join(p.all_organizers)),
-            sanitize_csv_cell("نعم" if p.is_contest else "لا"),
-            sanitize_csv_cell(", ".join(p.jury_members or [])),
-            sanitize_csv_cell(p.start_date.strftime("%Y-%m-%d") if p.start_date else ""),
-            sanitize_csv_cell(p.end_date.strftime("%Y-%m-%d") if p.end_date else ""),
-            sanitize_csv_cell(p.created_at.strftime("%Y-%m-%d") if p.created_at else "")
-        ])
+        project_rows.append(
+            [
+                sanitize_csv_cell(p.id),
+                sanitize_csv_cell(p.localized_text("title", export_lang)),
+                sanitize_csv_cell(p.t_type(export_lang)),
+                sanitize_csv_cell(p.target_wiki),
+                sanitize_csv_cell(p.target_wiki_url),
+                sanitize_csv_cell(p.t_status(export_lang)),
+                sanitize_csv_cell(", ".join(p.all_organizers)),
+                sanitize_csv_cell(yes_label if p.is_contest else no_label),
+                sanitize_csv_cell(", ".join(p.jury_members or [])),
+                sanitize_csv_cell(p.start_date.strftime("%Y-%m-%d") if p.start_date else ""),
+                sanitize_csv_cell(p.end_date.strftime("%Y-%m-%d") if p.end_date else ""),
+                sanitize_csv_cell(p.created_at.strftime("%Y-%m-%d") if p.created_at else ""),
+                sanitize_csv_cell(p.campaign or ""),
+                sanitize_csv_cell(", ".join(p.tags)),
+                sanitize_csv_cell(p.wiki_link or ""),
+            ]
+        )
+
+    headers = [
+        _r("athar-csv-l2-col-id", lang=export_lang),
+        _r("athar-csv-l2-col-title", lang=export_lang),
+        _r("athar-csv-l2-col-type", lang=export_lang),
+        _r("athar-csv-l2-col-wiki", lang=export_lang),
+        _r("athar-csv-l2-col-wiki-url", lang=export_lang),
+        _r("athar-csv-l2-col-status", lang=export_lang),
+        _r("athar-csv-l2-col-organizers", lang=export_lang),
+        _r("athar-csv-l2-col-contest", lang=export_lang),
+        _r("athar-csv-l2-col-jury", lang=export_lang),
+        _r("athar-csv-l2-col-start", lang=export_lang),
+        _r("athar-csv-l2-col-end", lang=export_lang),
+        _r("athar-csv-l2-col-created", lang=export_lang),
+        _r("athar-csv-l2-col-campaign", lang=export_lang),
+        _r("athar-csv-l2-col-tags", lang=export_lang),
+        _r("athar-csv-l2-col-wiki-link", lang=export_lang),
+    ]
 
     def generate_csv():
         output = io.StringIO()
         writer = csv.writer(output)
-        yield '\ufeff'
+        yield "\ufeff"
 
-        headers = [
-            "المعرف",
-            "عنوان النشاط",
-            "نوع النشاط",
-            "المشروع المستهدف",
-            "رابط المشروع",
-            "الحالة",
-            "المنظمون",
-            "مسابقة",
-            "لجنة التحكيم",
-            "تاريخ البدء",
-            "تاريخ الانتهاء",
-            "تاريخ التسجيل"
-        ]
         writer.writerow(headers)
         yield output.getvalue()
         output.seek(0)
@@ -743,7 +625,7 @@ def exp_community_projects(slug):
     return Response(
         stream_with_context(generate_csv()),
         mimetype="text/csv; charset=utf-8",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 
@@ -753,40 +635,99 @@ def check_user():
     if not username:
         return jsonify({"exists": False, "error": "Username is required."}), 400
 
-    # Check local DB first
-    local_user = User.query.filter(func.lower(User.username) == username.lower()).first()
-    if local_user:
-        return jsonify({
-            "exists": True,
-            "username": local_user.username,
-            "source": "local"
-        }), 200
-
-    # Check Wikimedia CentralAuth
-    import requests
-    url = "https://meta.wikimedia.org/w/api.php"
-    params = {
-        "action": "query",
-        "meta": "globaluserinfo",
-        "guiuser": username,
-        "format": "json"
-    }
-    headers = {"User-Agent": "AtharTool/1.0 (https://toolforge.org/athar; contact@athar)"}
     try:
-        r = requests.get(url, params=params, headers=headers, timeout=5)
-        if r.status_code == 200:
-            gui = r.json().get("query", {}).get("globaluserinfo", {})
-            if "missing" in gui:
-                return jsonify({"exists": False, "username": username}), 200
-            canonical_name = gui.get("name", username)
-            return jsonify({
-                "exists": True,
-                "username": canonical_name,
-                "id": gui.get("id"),
-                "home": gui.get("home", ""),
-                "source": "wikimedia"
-            }), 200
-    except Exception:
+        result = verify_wikimedia_username(username)
+    except ValueError as err:
+        return jsonify({"exists": False, "error": str(err)}), 400
+    except RuntimeError as err:
+        return jsonify({"exists": False, "error": str(err)}), 503
+
+    return jsonify(result), 200
+
+
+_WIKI_LANGUAGES_CACHE = {"fetched_at": 0.0, "data": None}
+_WIKI_LANGUAGES_TTL = 24 * 3600
+
+
+@api_bp.route("/languages", methods=["GET"])
+def list_wikimedia_languages():
+    """Return cached Wikimedia + MinT supported language matrix [[code, name, ...], ...]."""
+    now_ts = time.time()
+    cached = _WIKI_LANGUAGES_CACHE.get("data")
+    if cached is not None and (now_ts - _WIKI_LANGUAGES_CACHE["fetched_at"]) < _WIKI_LANGUAGES_TTL:
+        return jsonify(cached), 200
+
+    headers = {"User-Agent": current_app.config.get("USER_AGENT", "AtharTool/1.0")}
+    mint_base = (current_app.config.get("MINT_API_URL") or "https://translate.wmcloud.org/api").rstrip("/")
+    merged = {}
+    en_names = {}
+
+    try:
+        r_mw = requests.get(
+            "https://meta.wikimedia.org/w/api.php",
+            params={"action": "query", "meta": "siteinfo", "siprop": "languages", "format": "json"},
+            headers=headers,
+            timeout=8,
+        )
+        if r_mw.status_code == 200:
+            for item in r_mw.json().get("query", {}).get("languages", []):
+                code = str(item.get("code") or "").strip().lower()
+                name = str(item.get("*") or "").strip()
+                if LANG_CODE_REGEX.match(code):
+                    merged[code] = name or code
+    except (requests.RequestException, ValueError, TypeError):
         pass
 
-    return jsonify({"exists": False, "username": username}), 200
+    try:
+        r_en = requests.get(
+            "https://meta.wikimedia.org/w/api.php",
+            params={
+                "action": "query",
+                "meta": "siteinfo",
+                "siprop": "languages",
+                "siinlanguagecode": "en",
+                "format": "json",
+            },
+            headers=headers,
+            timeout=8,
+        )
+        if r_en.status_code == 200:
+            for item in r_en.json().get("query", {}).get("languages", []):
+                c = str(item.get("code") or "").strip().lower()
+                n = str(item.get("*") or "").strip()
+                if c and n:
+                    en_names[c] = n
+    except (requests.RequestException, ValueError, TypeError):
+        pass
+
+    try:
+        r_mint = requests.get(f"{mint_base}/languages", headers=headers, timeout=8)
+        if r_mint.status_code == 200:
+            mint_data = r_mint.json()
+            if isinstance(mint_data, dict):
+                for src, tgts in mint_data.items():
+                    c = str(src).strip().lower()
+                    if LANG_CODE_REGEX.match(c) and c not in merged:
+                        merged[c] = en_names.get(c, c)
+                    if isinstance(tgts, (dict, list)):
+                        for t in tgts:
+                            tc = str(t).strip().lower()
+                            if LANG_CODE_REGEX.match(tc) and tc not in merged:
+                                merged[tc] = en_names.get(tc, tc)
+    except (requests.RequestException, ValueError, TypeError):
+        pass
+
+    if merged:
+        result = []
+        for c in sorted(merged.keys()):
+            autonym = merged[c]
+            en_n = en_names.get(c, "")
+            if en_n and en_n.lower() != autonym.lower():
+                result.append([c, autonym, en_n])
+            else:
+                result.append([c, autonym])
+        _WIKI_LANGUAGES_CACHE["fetched_at"] = now_ts
+        _WIKI_LANGUAGES_CACHE["data"] = result
+        return jsonify(result), 200
+
+    return jsonify(cached or []), 200

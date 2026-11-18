@@ -185,13 +185,15 @@ def sync_community(community, force=False):
 
 def sync_project_contributors(force=False):
     """
-    Scans all projects in the database to discover contributors (lead organizers,
-    co-organizers, jury members, and participants).
+    Scans active (non-deleted) projects in the database to discover contributors
+    (lead organizers, co-organizers, jury members, and participants).
     Creates User records for newly discovered contributors and fetches their
     CentralAuth global stats if not synced within the freshness window.
     Returns the count of project contributors processed.
     """
-    projects = Project.query.all()
+    from app.query_utils import active_projects_query
+
+    projects = active_projects_query().all()
     unique_usernames = set()
 
     for proj in projects:
@@ -243,6 +245,21 @@ def sync_project_contributors(force=False):
     return synced_count
 
 
+def sync_active_project_statuses():
+    """Update date-derived statuses for non-deleted, non-Canceled projects off GET paths."""
+    from app.query_utils import active_projects_query
+
+    updated_count = 0
+    for proj in active_projects_query().all():
+        old_status = proj.status
+        if proj.sync_status_with_dates() != old_status:
+            updated_count += 1
+    if updated_count:
+        db.session.commit()
+    print(f"[Sync] Updated date-derived status for {updated_count} active project(s).")
+    return updated_count
+
+
 def run_sync(force=False):
     """
     Multi-community sync loop:
@@ -282,6 +299,14 @@ def run_sync(force=False):
         except Exception as proj_err:
             db.session.rollback()
             print(f"[Error] Failed to process project contributors: {proj_err}")
+
+        # Synchronize project date-derived statuses
+        try:
+            print("\n--- Synchronizing Active Project Statuses ---")
+            sync_active_project_statuses()
+        except Exception as status_err:
+            db.session.rollback()
+            print(f"[Error] Failed to update project statuses: {status_err}")
 
         print("\n[Sync] Multi-community synchronization cycle complete.")
 

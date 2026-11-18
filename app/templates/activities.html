@@ -1,77 +1,133 @@
 {% extends "base.html" %}
 
-{% block title %}الأنشطة — {{ community.name if community else 'ويكيميديا' }} — أثر{% endblock %}
+{% block title %}{{ _('athar-activities-page-title') }} — {{ community.name if community else _('athar-field-all-communities') }} — {{ _('athar-brand-name') }}{% endblock %}
 
 {% block content %}
-<div class="dashboard-charts" data-community-slug="{{ community.slug }}" data-community-name="{{ community.name }}">
+<div class="dashboard-charts" data-community-slug="{{ community.slug if community else '' }}" data-community-name="{{ community.name if community else _('athar-field-all-communities') }}">
 
-    <!-- Community Header & Tab Navigation -->
-    {% include "partials/community_nav.html" %}
+    {% if community %}
+        {% include "partials/community_nav.html" %}
+    {% endif %}
 
-    <!-- Filter and Activities Section -->
     <div class="filter-project-box" style="margin-top: 1rem;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 0.75rem;">
+        <div class="section-header-row" style="margin-bottom: 1.25rem;">
             <div>
-                <h3 style="margin: 0 0 0.25rem 0; font-size: 1.3rem; color: #202122;">سجل واستكشاف الأنشطة المجتمعية</h3>
-                <p style="margin: 0; font-size: 0.85rem; color: #54595d;">تصفح، ابحث، وفلتر جميع ورشات العمل، ماراثونات التحرير، والمسابقات.</p>
+                <h2 style="margin: 0 0 0.25rem 0; font-size: 1.35rem;">
+                    {% if community %}
+                        {{ _('athar-activities-heading-community', community.name) }}
+                    {% else %}
+                        {{ _('athar-activities-heading-global') }}
+                    {% endif %}
+                </h2>
+                <p style="margin: 0; font-size: 0.88rem;">{{ _('athar-activities-subtitle') }}</p>
             </div>
-            <a href="{{ url_for('web.create_project') }}" class="cdx-button cdx-button--action cdx-button--weight-primary">
-                + إضافة نشاط جديد
-            </a>
+            {% if current_user and (current_user.is_member or current_user.is_admin) %}
+                <a href="{{ url_for('web.create_project') }}" class="cdx-button cdx-button--action cdx-button--weight-primary">
+                    {{ _('athar-btn-add-activity') }}
+                </a>
+            {% endif %}
         </div>
 
-        <div style="display: none;">
-            <label for="list-comm">اختر المجتمع:</label>
-            <select id="list-comm"></select>
-        </div>
-
-        <form id="dashboard-filters" class="dashboard-filters-form">
+        <form id="dashboard-filters" class="dashboard-filters-form" method="GET" action="{{ url_for('web.community_activities', slug=community.slug) if community else url_for('web.global_activities') }}">
             <div class="filter-field-group">
-                <label for="start-date" class="cdx-label">تاريخ البدء</label>
-                <input type="date" id="start-date" class="cdx-text-input">
+                <label for="filter-q" class="cdx-label">{{ _('athar-field-keyword') }}</label>
+                <input type="text" id="filter-q" name="q" class="cdx-text-input" value="{{ filter_args.get('q', '') }}" placeholder="{{ _('athar-field-keyword-placeholder') }}">
+            </div>
+
+            {% if not community %}
+            <div class="filter-field-group">
+                <label for="filter-community" class="cdx-label">{{ _('athar-field-community') }}</label>
+                <select id="filter-community" name="community" class="cdx-select">
+                    <option value="">{{ _('athar-field-all-communities') }}</option>
+                    {% for comm in communities %}
+                        <option value="{{ comm.slug }}" {% if filter_args.get('community') == comm.slug %}selected{% endif %}>{{ comm.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% endif %}
+
+            <div class="filter-field-group">
+                <label for="filter-campaign" class="cdx-label">{{ _('athar-field-campaign') }}</label>
+                <input type="text" id="filter-campaign" name="campaign" list="activities-campaigns-list" class="cdx-text-input" value="{{ filter_args.get('campaign', '') }}" placeholder="{{ _('athar-field-campaign-placeholder') }}">
+                <datalist id="activities-campaigns-list">
+                    {% for camp in available_campaigns %}
+                        <option value="{{ camp }}">
+                    {% endfor %}
+                </datalist>
             </div>
 
             <div class="filter-field-group">
-                <label for="end-date" class="cdx-label">تاريخ الانتهاء</label>
-                <input type="date" id="end-date" class="cdx-text-input">
+                <label for="filter-tag" class="cdx-label">{{ _('athar-field-tag') }}</label>
+                <input type="text" id="filter-tag" name="tag" class="cdx-text-input" value="{{ filter_args.get('tag', filter_args.get('tags', '')) }}" placeholder="{{ _('athar-field-tag-placeholder') }}">
             </div>
 
             <div class="filter-field-group">
-                <label for="activity-type" class="cdx-label">نوع النشاط</label>
-                <select id="activity-type" class="cdx-select">
-                    <option value="">جميع أنواع الأنشطة</option>
-                    <option value="Workshop">ورشات تدريبية</option>
-                    <option value="Edit-a-thon">ماراثونات تحرير</option>
-                    <option value="Photo Walk">جولات تصوير</option>
-                    <option value="Contest">مسابقات ومنافسات</option>
-                    <option value="GLAM">شراكات ثقافية</option>
-                    <option value="Education Program">برامج تعليمية</option>
-                    <option value="Campaign">حملات محتوى</option>
-                    <option value="Conference / Meetup">مؤتمرات ولقاءات</option>
-                    <option value="Hackathon">فعاليات برمجية وهاكاثونات</option>
-                    <option value="Translation">حملات ترجمة</option>
-                    <option value="Exhibition">معارض وتوثيق</option>
-                    <option value="Other">أنشطة أخرى مخصصة</option>
+                <label for="activity-type" class="cdx-label">{{ _('athar-field-type') }}</label>
+                <select id="activity-type" name="type" class="cdx-select">
+                    <option value="">{{ _('athar-field-all-types') }}</option>
+                    <option value="Workshop" {% if filter_args.get('type') == 'Workshop' %}selected{% endif %}>{{ _('athar-type-workshop') }}</option>
+                    <option value="Edit-a-thon" {% if filter_args.get('type') == 'Edit-a-thon' %}selected{% endif %}>{{ _('athar-type-edit-a-thon') }}</option>
+                    <option value="Photo Walk" {% if filter_args.get('type') == 'Photo Walk' %}selected{% endif %}>{{ _('athar-type-photo-walk') }}</option>
+                    <option value="Contest" {% if filter_args.get('type') == 'Contest' %}selected{% endif %}>{{ _('athar-type-contest') }}</option>
+                    <option value="GLAM" {% if filter_args.get('type') == 'GLAM' %}selected{% endif %}>{{ _('athar-type-glam') }}</option>
+                    <option value="Education Program" {% if filter_args.get('type') == 'Education Program' %}selected{% endif %}>{{ _('athar-type-education') }}</option>
+                    <option value="Campaign" {% if filter_args.get('type') == 'Campaign' %}selected{% endif %}>{{ _('athar-type-campaign') }}</option>
+                    <option value="Conference / Meetup" {% if filter_args.get('type') == 'Conference / Meetup' %}selected{% endif %}>{{ _('athar-type-conference') }}</option>
+                    <option value="Hackathon" {% if filter_args.get('type') == 'Hackathon' %}selected{% endif %}>{{ _('athar-type-hackathon') }}</option>
+                    <option value="Translation" {% if filter_args.get('type') == 'Translation' %}selected{% endif %}>{{ _('athar-type-translation') }}</option>
+                    <option value="Exhibition" {% if filter_args.get('type') == 'Exhibition' %}selected{% endif %}>{{ _('athar-type-exhibition') }}</option>
+                    <option value="Other" {% if filter_args.get('type') == 'Other' %}selected{% endif %}>{{ _('athar-type-other') }}</option>
                 </select>
             </div>
 
             <div class="filter-field-group">
-                <label for="project-status" class="cdx-label">حالة النشاط</label>
-                <select id="project-status" class="cdx-select">
-                    <option value="">جميع الحالات</option>
-                    <option value="In Progress">جارية</option>
-                    <option value="Planned">مخططة</option>
-                    <option value="Completed">مكتملة</option>
+                <label for="project-status" class="cdx-label">{{ _('athar-field-status') }}</label>
+                <select id="project-status" name="status" class="cdx-select">
+                    <option value="">{{ _('athar-field-all-statuses') }}</option>
+                    <option value="In Progress" {% if filter_args.get('status') == 'In Progress' %}selected{% endif %}>{{ _('athar-status-in-progress') }}</option>
+                    <option value="Planned" {% if filter_args.get('status') == 'Planned' %}selected{% endif %}>{{ _('athar-status-planned') }}</option>
+                    <option value="Completed" {% if filter_args.get('status') == 'Completed' %}selected{% endif %}>{{ _('athar-status-completed') }}</option>
+                    <option value="Canceled" {% if filter_args.get('status') in ('Canceled', 'Cancelled') %}selected{% endif %}>{{ _('athar-status-canceled') }}</option>
                 </select>
+            </div>
+
+            <div class="filter-field-group">
+                <label for="filter-year" class="cdx-label">{{ _('athar-field-year') }}</label>
+                <select id="filter-year" name="year" class="cdx-select">
+                    <option value="">{{ _('athar-field-all') }}</option>
+                    {% for y in available_years %}
+                        <option value="{{ y }}" {% if filter_args.get('year') == (y|string) %}selected{% endif %}>{{ y }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="filter-field-group">
+                <label for="filter-month" class="cdx-label">{{ _('athar-field-month') }}</label>
+                <select id="filter-month" name="month" class="cdx-select">
+                    <option value="">{{ _('athar-field-all') }}</option>
+                    {% for m in range(1, 13) %}
+                        <option value="{{ m }}" {% if filter_args.get('month') == (m|string) %}selected{% endif %}>{{ m }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="filter-field-group">
+                <label for="start-date" class="cdx-label">{{ _('athar-field-from-date') }}</label>
+                <input type="date" id="start-date" name="start_date" class="cdx-text-input" value="{{ filter_args.get('start_date', '') }}">
+            </div>
+
+            <div class="filter-field-group">
+                <label for="end-date" class="cdx-label">{{ _('athar-field-to-date') }}</label>
+                <input type="date" id="end-date" name="end_date" class="cdx-text-input" value="{{ filter_args.get('end_date', '') }}">
             </div>
 
             <div class="filter-actions-group">
                 <button type="submit" id="apply-filters" class="cdx-button cdx-button--action cdx-button--weight-primary">
-                    تطبيق التصفية
+                    {{ _('athar-btn-apply-filters') }}
                 </button>
-                <button type="reset" id="reset-filters" class="cdx-button">
-                    إعادة ضبط
-                </button>
+                <a href="{{ url_for('web.community_activities', slug=community.slug) if community else url_for('web.global_activities') }}" id="reset-filters" class="cdx-button">
+                    {{ _('athar-btn-reset-filters') }}
+                </a>
             </div>
         </form>
 
@@ -79,97 +135,75 @@
             {% if projects %}
                 <div class="projects-grid">
                     {% for proj in projects %}
-                        <div class="project-card clickable-project-card" data-project-id="{{ proj.id }}">
+                        <div class="project-card" data-project-id="{{ proj.id }}">
                             <div class="project-card-top">
                                 <div class="project-card-badges">
-                                    <span class="project-type-badge">{{ proj.project_type|ar_type }}</span>
-                                    <span class="project-status project-status--{{ proj.status|lower|replace(' ', '-') }}">{{ proj.status|ar_status }}</span>
+                                    <span class="project-type-badge">{{ proj.t_type() }}</span>
+                                    <span class="project-status project-status--{{ proj.status|lower|replace(' ', '-') }}">{{ proj.t_status() }}</span>
+                                    {% if proj.is_contest %}
+                                        <span class="project-contest-badge">{{ _('athar-detail-contest-badge') }}</span>
+                                    {% endif %}
                                 </div>
-                                <h4 class="project-card-title">{{ proj.title }}</h4>
+                                <h3 class="project-card-title">
+                                    <a href="{{ url_for('web.view_project', project_id=proj.id) }}">
+                                        <bdi lang="{{ proj.localized_source_lang('title') }}" dir="auto">{{ proj.localized_text('title') }}</bdi>
+                                    </a>
+                                </h3>
                                 <div class="project-card-meta">
+                                    {% if proj.community and not community %}
+                                        <div class="project-meta-row">
+                                            <span class="project-meta-label">{{ _('athar-field-community') }}:</span>
+                                            <a href="{{ url_for('web.dashboard', slug=proj.community.slug) }}" class="project-community-link">{{ proj.community.name }}</a>
+                                        </div>
+                                    {% endif %}
+                                    {% if proj.campaign %}
+                                        <div class="project-meta-row">
+                                            <span class="project-meta-label">{{ _('athar-field-campaign') }}:</span>
+                                            <a href="{{ url_for('web.global_activities', campaign=proj.campaign) }}" class="project-campaign-badge">{{ proj.campaign }}</a>
+                                        </div>
+                                    {% endif %}
                                     <div class="project-meta-row">
-                                        <span class="project-meta-label">المشروع المستهدف:</span>
+                                        <span class="project-meta-label">{{ _('athar-field-target-wiki') }}:</span>
                                         <bdi class="project-meta-val">{{ proj.target_wiki }}</bdi>
                                     </div>
                                     <div class="project-meta-row">
-                                        <span class="project-meta-label">المنظمون:</span>
+                                        <span class="project-meta-label">{{ _('athar-field-organizers') }}:</span>
                                         <bdi class="project-meta-val">{{ proj.all_organizers|join('، ') if proj.all_organizers else '—' }}</bdi>
                                     </div>
+                                    {% if proj.wiki_link %}
+                                        <div class="project-meta-row">
+                                            <span class="project-meta-label">{{ _('athar-field-wiki-link') }}:</span>
+                                            <a href="{{ proj.wiki_link }}" target="_blank" rel="noopener noreferrer" class="project-wiki-external-link">{{ _('athar-activities-open-link') }}</a>
+                                        </div>
+                                    {% endif %}
                                 </div>
+                                {% if proj.tags %}
+                                    <div class="project-tags-row">
+                                        {% for tag in proj.tags %}
+                                            <a href="{{ url_for('web.community_activities', slug=community.slug, tag=tag) if community else url_for('web.global_activities', tag=tag) }}" class="project-tag-chip">#{{ tag }}</a>
+                                        {% endfor %}
+                                    </div>
+                                {% endif %}
                             </div>
                             <div class="project-card-footer-bar">
-                                <span class="project-card-date">{{ proj.created_at.strftime('%Y-%m-%d') if proj.created_at else '' }}</span>
-                                <a href="{{ url_for('web.view_project', project_id=proj.id) }}" class="project-card-details-btn">تفاصيل النشاط</a>
+                                <span class="project-card-date">
+                                    {% if proj.start_date %}{{ proj.start_date.strftime('%Y-%m-%d') }}{% if proj.end_date %} &rarr; {{ proj.end_date.strftime('%Y-%m-%d') }}{% endif %}{% elif proj.created_at %}{{ proj.created_at.strftime('%Y-%m-%d') }}{% endif %}
+                                </span>
+                                <a href="{{ url_for('web.view_project', project_id=proj.id) }}" class="project-card-details-btn">{{ _('athar-btn-activity-details') }}</a>
                             </div>
                         </div>
                     {% endfor %}
                 </div>
             {% else %}
-                <div style="text-align: center; padding: 2.5rem 1rem; color: #54595d;">
-                    <p style="font-size: 1rem; margin-bottom: 1rem;">لا توجد أي أنشطة مسجلة حالياً في هذا المجتمع.</p>
-                    <a href="{{ url_for('web.create_project') }}" class="cdx-button cdx-button--action cdx-button--weight-primary">+ إضافة أول نشاط</a>
+                <div class="empty-state-box">
+                    <p>{{ _('athar-activities-no-match') }}</p>
+                    {% if current_user and (current_user.is_member or current_user.is_admin) %}
+                        <a href="{{ url_for('web.create_project') }}" class="cdx-button cdx-button--action cdx-button--weight-primary">{{ _('athar-btn-add-activity') }}</a>
+                    {% endif %}
                 </div>
             {% endif %}
         </div>
     </div>
-
-    <!-- Project Details Modal -->
-    <div id="project-details-modal" class="project-modal-backdrop" aria-hidden="true" style="display: none;">
-        <div class="project-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="modal-project-title">
-            <div class="project-modal-header">
-                <div class="modal-title-wrap">
-                    <div class="modal-badges-row">
-                        <span id="modal-project-type" class="project-type-badge"></span>
-                        <span id="modal-project-status" class="project-status"></span>
-                        <span id="modal-contest-badge" class="project-contest-badge" style="display: none;">مسابقة / منافسة</span>
-                    </div>
-                    <h2 id="modal-project-title"></h2>
-                </div>
-                <button type="button" class="project-modal-close" id="modal-close-btn" aria-label="إغلاق">&times;</button>
-            </div>
-            
-            <div class="project-modal-body">
-                <div class="modal-meta-grid">
-                    <div class="modal-meta-item">
-                        <span class="meta-label">المجتمع التابع له:</span>
-                        <span class="meta-val" id="modal-community-name">-</span>
-                    </div>
-                    <div class="modal-meta-item">
-                        <span class="meta-label">المشروع المستهدف:</span>
-                        <span class="meta-val" id="modal-target-wiki">-</span>
-                    </div>
-                    <div class="modal-meta-item">
-                        <span class="meta-label">المنظمون:</span>
-                        <span class="meta-val" id="modal-lead-organizer">-</span>
-                    </div>
-                    <div class="modal-meta-item" id="modal-co-orgs-item" style="display: none;">
-                        <span class="meta-label">المنظمون المشاركون:</span>
-                        <span class="meta-val" id="modal-co-organizers">-</span>
-                    </div>
-                    <div class="modal-meta-item" id="modal-dates-item">
-                        <span class="meta-label">الفترة الزمنية:</span>
-                        <span class="meta-val" id="modal-dates">-</span>
-                    </div>
-                    <div class="modal-meta-item" id="modal-jury-item" style="display: none;">
-                        <span class="meta-label">لجنة التحكيم:</span>
-                        <span class="meta-val" id="modal-jury-members">-</span>
-                    </div>
-                </div>
-
-                <div class="modal-description-section">
-                    <h3>تفاصيل ووصف النشاط</h3>
-                    <div id="modal-project-description" class="modal-description-content"></div>
-                </div>
-            </div>
-
-            <div class="project-modal-footer">
-                <a id="modal-edit-link" href="#" class="cdx-button cdx-button--action cdx-button--weight-primary">تعديل النشاط</a>
-                <a id="modal-direct-link" href="#" class="cdx-button cdx-button--quiet" target="_blank" rel="noopener">فتح في صفحة مستقلة</a>
-                <button type="button" class="cdx-button" id="modal-footer-close-btn">إغلاق</button>
-            </div>
-        </div>
-    </div>
-
 </div>
 {% endblock %}
 

@@ -28,12 +28,14 @@ def resolve_database_uri(env=None):
 
 class Config:
     SECRET_KEY = os.environ.get('SECRET_KEY', 'dev-secret-key')
-    
+    DEBUG = (os.environ.get('DEBUG') or os.environ.get('FLASK_DEBUG') or 'False').lower() == 'true'
+    TESTING = (os.environ.get('TESTING') or 'False').lower() in ('1', 'true', 'yes')
+
     # Session Cookie Security Flags
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = "Lax"
-    SESSION_COOKIE_SECURE = os.environ.get('FLASK_DEBUG', 'False').lower() != 'true'
-    
+    SESSION_COOKIE_SECURE = not DEBUG
+
     # ToolsDB / Database Configuration
     SQLALCHEMY_DATABASE_URI = resolve_database_uri()
     SQLALCHEMY_TRACK_MODIFICATIONS = False
@@ -42,11 +44,26 @@ class Config:
         if SQLALCHEMY_DATABASE_URI.startswith("mysql")
         else {}
     )
-    
+
     # Wikimedia User-Agent Policy
     USER_AGENT = os.environ.get('USER_AGENT', 'Athar/1.0 (https://athar.toolforge.org; bonnjalal@gmail.com)')
-    
-    # Your Task 2 Additions
+
+    # OAuth & Local Mock Authentication
     MOCK_AUTH = os.environ.get('MOCK_AUTH', 'False').lower() == 'true'
+    MOCK_USERNAME = os.environ.get('MOCK_USERNAME', 'MoroccoVolunteer').strip() or 'MoroccoVolunteer'
+    MOCK_IS_ADMIN = os.environ.get('MOCK_IS_ADMIN', 'False').lower() == 'true'
     OAUTH_CLIENT_ID = os.environ.get('OAUTH_CLIENT_ID')
     OAUTH_CLIENT_SECRET = os.environ.get('OAUTH_CLIENT_SECRET')
+
+    # Governance & External Meta-Wiki Requests
+    ADMIN_USERS = {
+        u.replace('_', ' ').strip()
+        for u in os.environ.get('ADMIN_USERS', 'Bonnjalal00').split(',')
+        if u.strip()
+    }
+    DELETION_REQUEST_URL = os.environ.get('DELETION_REQUEST_URL', '').strip()
+
+    # Localization & Wikimedia MinT Machine Translation
+    DEFAULT_LOCALE = 'ar'
+    MINT_API_URL = os.environ.get('MINT_API_URL', 'https://translate.wmcloud.org/api').rstrip('/')
+    MINT_TIMEOUT_SECONDS = int(os.environ.get('MINT_TIMEOUT_SECONDS', '10'))

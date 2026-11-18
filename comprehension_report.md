@@ -1,59 +1,67 @@
-# Comprehension Test Report
+# Goldfish Review Report — Stage 6: Comprehension Test
 
-**Target:** `docs/designs/multi_level_export_and_user_intelligence.md`  
-**Reviewer:** `egm-comprehension`
+**Target:** `docs/designs/platform_redesign_i18n_and_admin_governance.md` (`FeatureRange: 1-401`, `DetailedRange: 402-635`)
 
-## Document Proposal Paraphrase
+## Paraphrase
 
-The document proposes introducing an end-to-end contributor intelligence feature and a symmetrical, three-tier reporting architecture for Athar. It adds a global contributor profile (`/user/<username>`) that aggregates multi-affiliate group memberships, cached cross-wiki edit metrics, and a role-categorized history of project involvement. To support comprehensive project tracking, the `Project` model is extended with structured JSON fields for participant rosters and competition results via volunteer-friendly form inputs and an automated migration script (`scripts/migrate_v2.py`). Finally, it implements both streaming CSV data exports and print-optimized HTML templates (`@media print`) across single projects, affiliates, and individual contributors, enabling one-click browser PDF generation without requiring heavy, crash-prone server-side rendering engines on Toolforge.
+**What this proposes**
+This document proposes a three-phase redesign of Athar, a Flask-based Wikimedia affiliate tracking platform on Toolforge, to support cross-community activity discovery, database-backed Tool Admin governance, interface localization, per-activity translations, and a dynamic theme toggle. Phase 1 removes duplicate date/status form controls and read-time `GET` database writes while preserving `"Canceled"` statuses, extends `Project` with validated `wiki_link` URLs, `campaign` presets, normalized `project_tags`, and soft-delete columns, introduces database-backed `User.is_admin` roles (bootstrapped with `Bonnjalal00` via `scripts/migrate_v3.py`) and an `/admin` governance console, and redesigns `/` alongside a global `/activities` directory backed by unified query filtering. Phase 2 replaces hardcoded Arabic strings across templates, Python routes, JavaScript bundles, CSV exports, and printable reports with Translatewiki-compatible `banana-i18n` JSON files (`en` fallback, `ar` with CLDR plurals, and `qqq` documentation) driven by a new `app/i18n.py` engine with header language switching (`dir="rtl|ltr"`) and isolated per-request `?lang=` report/CSV overrides, converts `codex.style.css` to CSS logical properties, and removes a broken `css/main.css` link in `reports/base_report.html`. Phase 3 adds `primary_lang` and `translations` JSON to `Project` with a Commons-style `"+ Add in another language"` panel in `project_form.html` powered by a rate-limited, CSRF-protected `POST /project/translate` Wikimedia MinT proxy and shared `bleach.clean` HTML sanitization, plus a FOUC-free `localStorage`-persisted `:root[data-theme="light|dark"]` theme system that updates Chart.js dynamically while keeping printable reports in light mode.
 
-## Existing System Paraphrase
-
-Per the document, Athar is an open-source analytics dashboard that currently tracks affiliate community rosters and logs activities, but lacks contributor-centric analytics and detailed reporting. When users click contributor handles in member lists, they are redirected out of Athar directly to Meta-Wiki rather than seeing internal project histories or unified cross-wiki metrics. The existing `Project` entity only models organizers and jury members, omitting structured data for participant attendees and contest outcomes. Furthermore, data export is currently restricted to a single affiliate-wide project CSV, with no support for single-project dossiers, individual contributor portfolios, or server-safe PDF generation under Toolforge resource limits.
+**How the existing system works, per this document**
+Per this document, Athar is a Flask application deployed on Toolforge (using SQLite in development/tests and ToolsDB MariaDB in production behind 4 Gunicorn sync workers) that collects contributor edit snapshots via `jobs.yaml`, `scripts/sync_data.py`, and the Wikimedia CentralAuth API while letting organizers log and export affiliate activities. Currently, over 60 user-facing strings across templates, Python routes, CSV exporters, and JavaScript modules are hardcoded in Arabic with physical RTL styling in `codex.style.css`, partial dark-mode media queries that conflict with inline light hex colors, and a report template (`reports/base_report.html`) linking to a missing `css/main.css` file. On `/`, `base.html` suppresses `<nav class="nav-links">`, visitors see only a community picker without cross-community activity search, any logged-in Wikimedia user can create communities via `POST /add-community`, `oauth_callback()` omits creating `User` rows for accounts missing from synced Meta-Wiki rosters, and no Tool Admin role, community edit route, or soft-delete/restore workflow exists. Additionally, `project_form.html` and `project_detail.html` display duplicate date/status elements with competing JavaScript handlers, `GET` dashboard and community activity routes run `Project.sync_status_with_dates()` and `db.session.commit()` (reverting `"Canceled"` projects on read), `filters.js` wipes server-rendered cards on load and aborts without `#list-comm`, and `Project` lacks activity URLs, campaign/tag classification, and per-activity translations.
 
 ---
 
-## Findings
+## Comprehension Audit Findings
 
-### 1. Architectural Contradiction Between Zero-Network Invariant and Synchronous User Lookup Fallback
-* **Severity:** 🔴 Blocker
-* **Affected Scope:** Lines 206–207 vs. Lines 24, 32, 246, 274
-* **Description:** Goal 2 and NFRs explicitly state that zero outbound HTTP requests are permitted during web requests. However, Section 6 specifies that if a user is missing locally, the controller queries CentralAuth synchronously via `check_user`.
-* **Recommendation:** Eliminate the synchronous external network call. If a requested username is not found in the local database, return an immediate HTTP 404 without touching the network.
+### 1. Admin Bootstrap vs. Revocation Rules & Unexplained Existing RBAC Model - Severity: Blocker
+* **Affected Scope:** `app/oauth.py`, `config.py`, `app/routes/admin.py` (`Lines 172, 188, 213-214, 228, 349, 412, 440-441, 607, 628`)
+* **Discrepancy Description & Rationale:**
+  * The document specifies contradictory rules for `Config.ADMIN_USERS` vs. database-backed `User.is_admin`:
+    * Line 213 states `oauth_callback()` must promote matching `ADMIN_USERS` *"without re-promoting admins explicitly demoted via DB flags unless configured as locked bootstrap admins (`Bonnjalal00` seeded on migration/init)"*, yet `config.py` (line 412) only defines `ADMIN_USERS` with no "locked bootstrap admins" setting, and no mechanism distinguishes an explicitly demoted `User` (`is_admin=False`) from a pre-existing non-admin `User` row listed in `ADMIN_USERS` logging in for the first time.
+    * Line 228 adds `POST /admin/admins/revoke` to set `User.is_admin=False` in the database.
+    * Line 441 instructs `@admin_required`, `@member_required`, and `@project_editor_required` to evaluate privileges against *"fresh DB state (plus `Config.ADMIN_USERS`)"*. Checking `Config.ADMIN_USERS` on every request grants permanent admin access regardless of `User.is_admin=False`, nullifying database revocation for bootstrap admins.
+  * Compounding this, the existing authorization model (`User.is_member` vs. `CommunityMember` mentioned on line 349, `@member_required` vs. `@project_editor_required`, and the `"anonymous / non-member / member / organizer / admin"` RBAC matrix on lines 607 and 628) is never defined in the document, leaving a fresh reader unable to determine who may create projects, edit projects across communities, or trigger `POST /<slug>/sync` (lines 214, 485).
 
-### 2. Undefined Internal Routines and Assumed Institutional Knowledge
-* **Severity:** 🟡 Major
-* **Affected Scope:** Lines 207, 221, 330, 385 (`check_user`, `fetch_global_stats`, `exp_community_projects`)
-* **Description:** The document references `check_user`, `fetch_global_stats()`, and `exp_community_projects` without indicating their module locations, signatures, or error behaviors.
-* **Recommendation:** Document module paths, signatures, and contracts for all referenced functions.
+### 2. Phase 3 MinT Proxy RBAC & API/Rate-Limit Specification - Severity: Major
+* **Affected Scope:** `POST /project/translate`, `config.py`, `translation-panel.js` (`Lines 188, 213-214, 286, 355-356, 379, 413, 490, 593, 609`)
+* **Discrepancy Description & Rationale:**
+  * **RBAC Dead-End for Non-Member Admins:** Lines 188 and 213 explicitly provision non-rostered Tool Admins (such as `Bonnjalal00`) with `is_member=False`, while lines 214 and 356 state that Tool Admins can edit any project and that MinT translation *"lets organizers or Admins review and edit translated fields"*. However, lines 286 and 490 protect `POST /project/translate` with `@member_required`, and the document never states that `@member_required` grants access to `is_admin` (whereas line 214 explicitly notes updating `@project_editor_required` to permit `is_admin`). As written, a non-member Admin would be blocked with HTTP 403 when clicking `"Auto-translate with MinT"`.
+  * **Underspecified Upstream & Rate-Limit Contract:** Although `MINT_API_URL` (`"https://translate.wmcloud.org/api"`, line 413) and `GET .../api/languages` caching (line 286) are described, the document never specifies the MinT translation endpoint path, HTTP method, or request/response schema (including how HTML-whitelisted `description` vs. plain-text `title`/`results_*` fields are transmitted and returned), how `translation-panel.js` checks supported languages to show `"Manual entry only"`, or the numeric threshold, time window, error status, and backing store for the *"session rate limit"* (critical because `Procfile` runs 4 Gunicorn sync workers per line 355, making in-worker memory and signed-cookie `session` behave very differently).
 
-### 3. Unlinked and Undefined Wikimedia-Specific Systems
-* **Severity:** 🟡 Major
-* **Affected Scope:** Lines 13, 28, 46, 92–93, 131, 207, 246, 305, 357 (`CentralAuth`, `Translatewiki.net`, `XTools`, `ToolsDB`)
-* **Description:** Specialized Wikimedia infrastructure tools are cited without definitions or documentation links.
-* **Recommendation:** Provide brief contextual definitions and links (e.g. MediaWiki CentralAuth, XTools on Toolforge, ToolsDB MariaDB cluster).
+### 3. `validate_activity_wiki_url()` `http://` Handling - Severity: Major
+* **Affected Scope:** `app/wiki_utils.py` (`Lines 193-194, 372, 447, 628`)
+* **Discrepancy Description & Rationale:** Line 193 explicitly says `validate_activity_wiki_url()` *"normalizes `http://` to `https://`"*, while lines 194 and 447 say it checks `https` and *"rejects any URL with non-HTTPS scheme"*. Line 372 explicitly hedges (*"rejects `http://` (upgrading or rejecting cleanly)"*), and line 628 mandates full branch verification of *"rejection cases (non-HTTPS, ...)"*. Implementers and test authors cannot tell whether `http://` links should be upgraded to `https://` or rejected as validation errors.
 
-### 4. Ambiguous Relational Model and Role Filtering Resolution
-* **Severity:** 🟡 Major
-* **Affected Scope:** Lines 81, 212–215, 292–296
-* **Description:** The document omits the relationship connecting `User`, `Community`, and `CommunityMember`, and does not state how membership across JSON arrays is queried cross-database.
-* **Recommendation:** Explicitly document the relationship and specify the query strategy (in-memory candidate filtering or dialect-safe query).
+### 4. Soft-Delete ORM Filter Scope & Phase 3 `Project` Translation/Serialization Contracts - Severity: Major
+* **Affected Scope:** `app/models.py`, `app/query_utils.py`, `app/routes/admin.py`, `project_form.html` (`Lines 231, 282, 432-433, 474, 488, 498, 549, 628`)
+* **Discrepancy Description & Rationale:**
+  * Line 231 describes registering a global SQLAlchemy `do_orm_execute` filter (`execution_options(include_deleted=True)`) as *"optional"*, yet line 474 assumes `execution_options(include_deleted=True)` in `GET /admin` while lines 488, 498, and 514 rely on manual `active_projects_query()` calls. If `do_orm_execute` is not implemented, ORM relationship loads (e.g., `community.projects`) or `Project.query.get()` calls could leak soft-deleted projects unless audited; additionally, line 628 mentions *"all 19+ `Project` query touchpoints"* without enumerating them.
+  * Line 432 says `Project.to_dict(current_user=None, lang=None)` includes *"`translations` / resolved fields"* in Phase 3 without specifying the JSON keys or whether passing `lang` overrides `title`/`description`/`results` in place. Line 433 does not define what `field_name` convention `Project.localized_field(field_name, target_lang)` expects for nested keys (`Project.results["summary"]` vs. `"results_summary"`), and line 549 does not specify how `project_form.html` defaults `primary_lang` for new non-Arabic entries or resolves collisions if an author changes `primary_lang` on an activity that already has `translations` entries (given line 282's *"no duplicate `translations[primary_lang]` shadow copy"* rule).
 
-### 5. Undefined Date Filter Parameter Contract for Printable Reports
-* **Severity:** 🟢 Nit
-* **Affected Scope:** Lines 56, 169, 310, 319, 347
-* **Description:** Query parameters accepted by report controllers (`?year=`, `?month=`, `?start_date=`, `?end_date=`) are not explicitly listed.
-* **Recommendation:** Document the canonical list of query parameters accepted by report routes.
+### 5. `filter_projects()` Query Semantics & `filters.js` HTML Rendering Conflict - Severity: Major
+* **Affected Scope:** `app/query_utils.py`, `app/static/js/filters.js` (`Lines 249, 252, 255, 283, 371, 459-460, 584`)
+* **Discrepancy Description & Rationale:**
+  * Line 252 describes multi-tag filtering as *"comma-separated `IN`/`AND` matching"*, mixing mutually exclusive semantics (`IN` = match any tag vs. `AND` = match all tags).
+  * Line 255 specifies month-without-year filtering via an incomplete placeholder (`extract('month', ...)`) without identifying whether it inspects `start_date`, `end_date`, or both, and its overlap expression `(start_date IS NULL OR start_date <= period_end) AND (end_date IS NULL OR end_date >= period_start)` evaluates to true whenever both project dates are `NULL` (matching every date range). Meanwhile, line 249 states `q` searches `Project.description` *"(where needed)"* without defining when it applies (omitted on line 459).
+  * Lines 283 and 371 permit sanitized HTML (`<p>`, `<b>`, `<a>`, `<ul>`, etc.) inside `Project.description` via `bleach.clean()`, while simultaneously removing `.innerHTML` in `filters.js` in favor of *"safe DOM/text rendering"* (line 584). The document does not explain how `filters.js` will safely render sanitized HTML in `description` without showing raw HTML tags as plain text.
 
-### 6. Typo in Implementation Plan Endpoint Function Identifier
-* **Severity:** 🟢 Nit
-* **Affected Scope:** Line 327
-* **Description:** Refers to `create_projetct` (with an extra `t`).
-* **Recommendation:** Note the existing codebase spelling while establishing clean routing aliases.
+### 6. `app/i18n.py` Domain/Locale Resolution & JS Formatting - Severity: Major
+* **Affected Scope:** `app/i18n.py`, `app/routes/web.py`, `app/templates/reports/` (`Lines 269-271, 413, 467-468, 490-491, 569-570`)
+* **Discrepancy Description & Rationale:**
+  * Line 467 defines `get_message(domain, key, *args, lang=None)` across two separate groups (`ui` and `reports`), whereas line 271 exposes `_(key, *args)` globally to Jinja templates without explaining how `_()` resolves the `"ui"` vs. `"reports"` domain or binds the per-request `?lang=` (`report_lang`, line 569) in report templates (line 570) without reading/mutating `session['lang']`.
+  * Line 269 leaves the default UI locale ambiguous (*"`'ar'` initially or `'en'` per config"*), whereas line 413 sets `DEFAULT_LOCALE` (`"ar"`), and line 490 leaves the UI language switching route unsettled as *"`POST /lang` (or `?set_lang=`)"*.
+  * Lines 271 and 468 export UI strings to `window.ATHAR_I18N` via `export_js_messages(lang)` without stating which keys are exported or whether `$1` interpolation and `{{PLURAL:...}}` forms are supported in JavaScript.
 
-### 7. Leaked Meta-Prompting Acronym (`EGM`)
-* **Severity:** 🟢 Nit
-* **Affected Scope:** Lines 408, 428
-* **Description:** Mentions internal framework acronym `EGM` which has no domain relevance for external contributors.
-* **Recommendation:** Remove internal meta-prompting acronyms.
+### 7. Unclear PDF Report Mechanism, `/add-community` Blueprint Placement, `/healthz` Scope, and Unexplained Existing Concepts - Severity: Major
+* **Affected Scope:** `Lines 11, 39, 49, 72, 105-106, 196, 205, 216-223, 292, 484, 490, 499, 510, 514, 565, 569, 592`
+* **Discrepancy Description & Rationale:**
+  * **PDF Reports vs. Browser Print HTML:** Lines 39, 72, 101, 355, and 565 refer to *"PDF exports"* and *"PDF report rendering"*, whereas lines 105, 292, and 569 describe `@media print` CSS and `.no-print` elements in `base_report.html` without any server-side PDF generator. A fresh reader cannot tell whether Athar renders PDFs server-side or relies solely on browser print-to-PDF HTML pages.
+  * **Contradictory Blueprint Placement & Unexplained `pending_community_*`:** Line 222 places `POST /add-community` inside the `app/routes/admin.py` (`admin_bp`) table, whereas line 484 modifies it inside `app/routes/web.py` and tells implementers to *"remove non-admin session stashing (`pending_community_*`)"*—an existing mechanism never defined or explained anywhere in the document.
+  * **Unexplained Existing Symbols & Unscoped `/healthz`:** `create_projetct()` (lines 196, 499) is referenced alongside `create_project()` without clarifying if it is a legacy misspelled symbol in `api.py` or a document typo; `Project.target_wiki_url` (line 196), `meta_roster_page` / `_async_sync_community` (lines 222–223), `scripts/migrate_sqlite_to_mariadb.py` (line 510), and how `sync_active_project_statuses()` in `scripts/sync_data.py` connects to `jobs.yaml` (lines 11, 514; `jobs.yaml` is absent from `Target Files to Create/Modify`) are referenced without inline definitions or links. Additionally, lines 49 and 205 mention detaching tags *"from `/api/check-user` lookups"* without explaining that the current form uses `/api/check-user` for organizer chips until line 592 (`chip-input.js`). Finally, line 490 adds `GET /healthz` checking *"DB schema columns and `i18n` JSON validity"* across `Phase 1, Phase 2, Phase 3` without defining its HTTP payload/status contract or noting that `i18n/` files do not exist during Phase 1.
 
+### 8. Open Questions vs. Plan Alignment, Edge-Case Rules & Unexplained Glosses - Severity: Nit
+* **Affected Scope:** `Lines 36, 78-79, 200, 211, 226, 228, 254, 269, 286, 373, 396, 419, 555`
+* **Discrepancy Description & Rationale:**
+  * Open Question #2 (line 79) asks whether renamed community `slug`s return HTTP 404 or redirect, while lines 396 and 555 already defer slug redirect history to Future Improvements and add a warning note in `admin.html`. Open Question #1 (line 78) leaves `Config.DELETION_REQUEST_URL` unresolved without specifying `project_detail.html` fallback behavior if unconfigured.
+  * Minor edge-case ambiguities: lines 211 and 373 omit the `unless TESTING=True` exception stated on line 419 for the `MOCK_AUTH=True` guard; lines 200, 431, and 449 handle both `"Canceled"` and `"Cancelled"` while line 254 filters only `"Canceled"`; line 228's *"prevents self-lockout"* is ambiguous between always forbidding self-revocation vs. only when last Admin; line 226's *"matching project ID/title"* confirmation input format and cascade impact on existing contributor tables on permanent purge are unstated; and `Codex` (line 36) plus Wikimedia language codes `ary`/`zgh` (lines 269, 286) appear without brief glosses.

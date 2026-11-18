@@ -1,0 +1,236 @@
+{% extends "base.html" %}
+
+{% block title %}{{ _('athar-admin-page-title') }} — {{ _('athar-brand-name') }}{% endblock %}
+
+{% block content %}
+<div class="admin-container">
+    <div class="admin-header-card">
+        <div>
+            <h1>{{ _('athar-admin-title') }}</h1>
+            <p>{{ _('athar-admin-subtitle') }}</p>
+        </div>
+        <div class="admin-header-stats">
+            <span class="admin-stat-pill">{{ _('athar-admin-stat-communities', communities|length) }}</span>
+            <span class="admin-stat-pill">{{ _('athar-admin-stat-active', active_projects|length) }}</span>
+            <span class="admin-stat-pill">{{ _('athar-admin-stat-deleted', deleted_projects|length) }}</span>
+            <span class="admin-stat-pill">{{ _('athar-admin-stat-admins', admins|length) }}</span>
+        </div>
+    </div>
+
+    <!-- Section 1: Communities Management -->
+    <section id="admin-communities" class="admin-panel-section">
+        <h2>{{ _('athar-admin-communities-heading') }}</h2>
+
+        <div class="admin-subcard">
+            <h3>{{ _('athar-admin-add-community-heading') }}</h3>
+            <form action="{{ url_for('admin.add_community') }}" method="POST" class="cdx-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                <input type="hidden" name="redirect_to" value="admin" />
+                <div class="form-row">
+                    <div class="form-group flex-1">
+                        <label for="add-comm-name" class="cdx-label">{{ _('athar-admin-comm-name-label') }}</label>
+                        <input type="text" id="add-comm-name" name="community_name" class="cdx-text-input" maxlength="120" required placeholder="Wikimedia Morocco">
+                    </div>
+                    <div class="form-group flex-1">
+                        <label for="add-comm-slug" class="cdx-label">{{ _('athar-admin-comm-slug-opt-label') }}</label>
+                        <input type="text" id="add-comm-slug" name="slug" dir="ltr" class="cdx-text-input" maxlength="64" pattern="[a-z0-9-]+" placeholder="wm-ma">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group flex-1">
+                        <label for="add-comm-roster" class="cdx-label">{{ _('athar-admin-comm-roster-label') }}</label>
+                        <input type="text" id="add-comm-roster" name="community_link" class="cdx-text-input" maxlength="255" required placeholder="https://meta.wikimedia.org/wiki/Wikimedia_MA_User_Group/Members">
+                    </div>
+                    <div class="form-group flex-1">
+                        <label for="add-comm-email" class="cdx-label">{{ _('athar-admin-comm-email-opt-label') }}</label>
+                        <input type="email" id="add-comm-email" name="contact_email" class="cdx-text-input" maxlength="128" placeholder="contact@wikimedia.org">
+                    </div>
+                </div>
+                <button type="submit" class="cdx-button cdx-button--action cdx-button--weight-primary">{{ _('athar-admin-btn-add-community') }}</button>
+            </form>
+        </div>
+
+        <div class="slug-warning-box">
+            <strong>{{ _('athar-admin-slug-warning-title') }}</strong>
+            {{ _('athar-admin-slug-warning-body', '<code>/&lt;new-slug&gt;/</code>')|safe }}
+        </div>
+
+        <div class="admin-communities-list">
+            {% for comm in communities %}
+                <details class="admin-community-accordion">
+                    <summary class="admin-community-summary">
+                        <span><strong>{{ comm.name }}</strong> (<code dir="ltr">/{{ comm.slug }}/</code>)</span>
+                        <span class="admin-meta-muted">{{ comm.meta_roster_page }}</span>
+                    </summary>
+                    <form action="{{ url_for('admin.edit_community', community_id=comm.id) }}" method="POST" class="cdx-form admin-inline-form">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                        <div class="form-row">
+                            <div class="form-group flex-1">
+                                <label class="cdx-label">{{ _('athar-admin-comm-name-label') }}</label>
+                                <input type="text" name="name" class="cdx-text-input" maxlength="120" value="{{ comm.name }}" required>
+                            </div>
+                            <div class="form-group flex-1">
+                                <label class="cdx-label">{{ _('athar-admin-comm-slug-label') }}</label>
+                                <input type="text" name="slug" dir="ltr" class="cdx-text-input" maxlength="64" pattern="[a-z0-9-]+" value="{{ comm.slug }}" required>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group flex-1">
+                                <label class="cdx-label">{{ _('athar-admin-comm-roster-label') }}</label>
+                                <input type="text" name="meta_roster_page" class="cdx-text-input" maxlength="255" value="{{ comm.meta_roster_page }}" required>
+                            </div>
+                            <div class="form-group flex-1">
+                                <label class="cdx-label">{{ _('athar-admin-comm-email-label') }}</label>
+                                <input type="email" name="contact_email" class="cdx-text-input" maxlength="128" value="{{ comm.contact_email or '' }}">
+                            </div>
+                        </div>
+                        <div class="admin-form-actions">
+                            <button type="submit" class="cdx-button cdx-button--action cdx-button--weight-primary">{{ _('athar-btn-save-changes') }}</button>
+                            <a href="{{ url_for('web.dashboard', slug=comm.slug) }}" class="cdx-button cdx-button--quiet">{{ _('athar-admin-btn-open-dashboard') }}</a>
+                        </div>
+                    </form>
+                </details>
+            {% endfor %}
+        </div>
+    </section>
+
+    <!-- Section 2: Active Projects Moderation -->
+    <section id="projects-moderation" class="admin-panel-section">
+        <h2>{{ _('athar-admin-moderation-heading') }}</h2>
+        {% if active_projects %}
+            <div class="admin-table-wrap">
+                <table class="admin-table">
+                    <thead>
+                        <tr>
+                            <th>{{ _('athar-admin-col-id') }}</th>
+                            <th>{{ _('athar-admin-col-activity-title') }}</th>
+                            <th>{{ _('athar-field-community') }}</th>
+                            <th>{{ _('athar-field-status') }}</th>
+                            <th>{{ _('athar-admin-col-actions') }}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for proj in active_projects %}
+                        <tr>
+                            <td>#{{ proj.id }}</td>
+                            <td>
+                                <a href="{{ url_for('web.view_project', project_id=proj.id) }}">
+                                    <bdi lang="{{ proj.localized_source_lang('title', current_locale()) }}" dir="auto">{{ proj.localized_text('title', current_locale()) }}</bdi>
+                                </a>
+                            </td>
+                            <td>{{ proj.community.name if proj.community else _('athar-field-general') }}</td>
+                            <td><span class="project-status project-status--{{ proj.status|lower|replace(' ', '-') }}">{{ proj.t_status() }}</span></td>
+                            <td class="admin-table-actions">
+                                <a href="{{ url_for('web.edit_project', project_id=proj.id) }}" class="cdx-button cdx-button--quiet">{{ _('athar-admin-btn-edit') }}</a>
+                                <form action="{{ url_for('admin.soft_delete_project', project_id=proj.id) }}" method="POST" style="display:inline;">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                                    <button type="submit" class="cdx-button cdx-button--destructive">{{ _('athar-btn-soft-delete') }}</button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <p>{{ _('athar-admin-no-active') }}</p>
+        {% endif %}
+    </section>
+
+    <!-- Section 3: Soft-Deleted Projects (Restore / Permanent Purge) -->
+    <section id="deleted-projects" class="admin-panel-section">
+        <h2>{{ _('athar-admin-deleted-heading') }}</h2>
+        {% if deleted_projects %}
+            <div class="admin-table-wrap">
+                <table class="admin-table">
+                    <thead>
+                        <tr>
+                            <th>{{ _('athar-admin-col-id') }}</th>
+                            <th>{{ _('athar-admin-col-activity-title') }}</th>
+                            <th>{{ _('athar-admin-col-deleted-by') }}</th>
+                            <th>{{ _('athar-admin-col-deleted-at') }}</th>
+                            <th>{{ _('athar-admin-col-restore') }}</th>
+                            <th>{{ _('athar-admin-col-purge') }}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for proj in deleted_projects %}
+                        <tr>
+                            <td>#{{ proj.id }}</td>
+                            <td><bdi lang="{{ proj.localized_source_lang('title', current_locale()) }}" dir="auto">{{ proj.localized_text('title', current_locale()) }}</bdi></td>
+                            <td>{{ proj.deleted_by or '—' }}</td>
+                            <td>{{ proj.deleted_at.strftime('%Y-%m-%d %H:%M') if proj.deleted_at else '—' }}</td>
+                            <td>
+                                <form action="{{ url_for('admin.restore_project', project_id=proj.id) }}" method="POST" style="display:inline;">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                                    <button type="submit" class="cdx-button cdx-button--action">{{ _('athar-admin-btn-restore') }}</button>
+                                </form>
+                            </td>
+                            <td>
+                                <form action="{{ url_for('admin.purge_project', project_id=proj.id) }}" method="POST" class="purge-confirm-form">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                                    <input type="text" name="confirm_project_id" class="cdx-text-input purge-id-input" placeholder="{{ _('athar-admin-purge-placeholder', proj.id) }}" required>
+                                    <button type="submit" class="cdx-button cdx-button--destructive">{{ _('athar-admin-btn-purge') }}</button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <p>{{ _('athar-admin-deleted-empty') }}</p>
+        {% endif %}
+    </section>
+
+    <!-- Section 4: Tool Admins Management -->
+    <section id="tool-admins" class="admin-panel-section">
+        <h2>{{ _('athar-admin-admins-heading') }}</h2>
+
+        <form action="{{ url_for('admin.grant_admin') }}" method="POST" class="admin-grant-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+            <div class="form-row">
+                <div class="form-group flex-1">
+                    <label for="grant-admin-username" class="cdx-label">{{ _('athar-admin-grant-label') }}</label>
+                    <input type="text" id="grant-admin-username" name="username" class="cdx-text-input" placeholder="Bonnjalal00" required>
+                </div>
+                <div class="filter-actions-group">
+                    <button type="submit" class="cdx-button cdx-button--action cdx-button--weight-primary">{{ _('athar-admin-btn-grant') }}</button>
+                </div>
+            </div>
+        </form>
+
+        <div class="admin-table-wrap">
+            <table class="admin-table">
+                <thead>
+                    <tr>
+                        <th>{{ _('athar-users-col-username') }}</th>
+                        <th>{{ _('athar-admin-col-membership') }}</th>
+                        <th>{{ _('athar-users-col-joined') }}</th>
+                        <th>{{ _('athar-admin-col-actions') }}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for adm in admins %}
+                    <tr>
+                        <td><a href="{{ url_for('web.user_profile', username=adm.username) }}">{{ adm.username }}</a></td>
+                        <td>{{ _('athar-admin-role-member') if adm.is_member else _('athar-admin-role-admin-only') }}</td>
+                        <td>{{ adm.first_seen.strftime('%Y-%m-%d') if adm.first_seen else '—' }}</td>
+                        <td>
+                            <form action="{{ url_for('admin.revoke_admin') }}" method="POST" style="display:inline;">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                                <input type="hidden" name="user_id" value="{{ adm.id }}" />
+                                <button type="submit" class="cdx-button cdx-button--destructive"
+                                    {% if adm.id == current_user.id or admins|length <= 1 %}disabled{% endif %}>
+                                    {{ _('athar-admin-btn-revoke') }}
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+</div>
+{% endblock %}

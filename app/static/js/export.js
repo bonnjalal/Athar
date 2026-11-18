@@ -1,39 +1,53 @@
 /**
  * Export data report logic:
  * Filters projects per community/group by year, month, custom date range, or all-time.
- * Provides real-time preview and direct CSV download.
+ * Propagates selected export/report language (?lang=) without mutating session locale.
  */
 
 let activeFilterMode = "year";
 let activeProjects = [];
 
-const TYPE_TRANSLATIONS = {
-    "workshop": "ورشة تدريبية",
-    "edit-a-thon": "ماراثون تحرير",
-    "photo walk": "جولة تصوير",
-    "contest": "مسابقة ومنافسة",
-    "glam": "شراكة ثقافية",
-    "education program": "برنامج تعليمي",
-    "outreach": "برنامج توعوي",
-    "campaign": "حملة محتوى",
-    "conference / meetup": "مؤتمر أو لقاء",
-    "hackathon": "فعالية برمجية",
-    "translation": "حملة ترجمة",
-    "exhibition": "معرض وتوثيق",
-    "other": "نشاط مخصص"
+function _t(key) {
+    const args = Array.prototype.slice.call(arguments);
+    if (window.atharI18n && window.atharI18n.t) {
+        return window.atharI18n.t.apply(window.atharI18n, args);
+    }
+    return key;
+}
+
+const TYPE_KEY_LOOKUP = {
+    "workshop": "athar-type-workshop",
+    "edit-a-thon": "athar-type-edit-a-thon",
+    "photo walk": "athar-type-photo-walk",
+    "contest": "athar-type-contest",
+    "contest / competition": "athar-type-contest",
+    "glam": "athar-type-glam",
+    "education program": "athar-type-education",
+    "outreach": "athar-type-outreach",
+    "campaign": "athar-type-campaign",
+    "conference / meetup": "athar-type-conference",
+    "hackathon": "athar-type-hackathon",
+    "translation": "athar-type-translation",
+    "exhibition": "athar-type-exhibition",
+    "other": "athar-type-other"
 };
 
-const STATUS_TRANSLATIONS = {
-    "in progress": "جارية",
-    "planned": "مخططة",
-    "completed": "مكتملة",
-    "canceled": "ملغاة",
-    "cancelled": "ملغاة"
+const STATUS_KEY_LOOKUP = {
+    "in progress": "athar-status-in-progress",
+    "planned": "athar-status-planned",
+    "completed": "athar-status-completed",
+    "canceled": "athar-status-canceled",
+    "cancelled": "athar-status-canceled"
 };
 
 function getCommunitySlug() {
     const select = document.getElementById("export-community");
     return select ? select.value : "";
+}
+
+function getSelectedExportLang() {
+    const langSelect = document.getElementById("export-lang");
+    return (langSelect && langSelect.value) ? langSelect.value : (window.ATHAR_LOCALE || "ar");
 }
 
 function getCommunityName() {
@@ -45,17 +59,11 @@ function getCommunityName() {
 function setFilterMode(mode) {
     activeFilterMode = mode;
 
-    // Update pill buttons
     const pills = document.querySelectorAll(".export-filter-pill");
     pills.forEach(pill => {
-        if (pill.getAttribute("data-mode") === mode) {
-            pill.classList.add("is-active");
-        } else {
-            pill.classList.remove("is-active");
-        }
+        pill.classList.toggle("is-active", pill.getAttribute("data-mode") === mode);
     });
 
-    // Toggle panels
     const panels = {
         "year": document.getElementById("panel-year"),
         "month": document.getElementById("panel-month"),
@@ -78,7 +86,6 @@ function onCommunityChange() {
 
 function buildQueryParams() {
     const params = new URLSearchParams();
-    const slug = getCommunitySlug();
 
     if (activeFilterMode === "year") {
         const yearVal = document.getElementById("filter-year")?.value;
@@ -112,6 +119,11 @@ function buildQueryParams() {
     if (incPlan) params.set("include_planned", incPlan.checked ? "1" : "0");
     if (incCanc) params.set("include_canceled", incCanc.checked ? "1" : "0");
 
+    const exportLang = getSelectedExportLang();
+    if (exportLang) {
+        params.set("lang", exportLang);
+    }
+
     return params;
 }
 
@@ -121,7 +133,7 @@ function getFilterDescriptionText() {
 
     if (activeFilterMode === "year") {
         const yr = document.getElementById("filter-year")?.value || "";
-        periodText = `سنة ${yr}`;
+        periodText = yr;
     } else if (activeFilterMode === "month") {
         const yr = document.getElementById("filter-month-year")?.value || "";
         const mSelect = document.getElementById("filter-month-val");
@@ -130,30 +142,21 @@ function getFilterDescriptionText() {
     } else if (activeFilterMode === "custom") {
         const start = document.getElementById("filter-custom-start")?.value || "";
         const end = document.getElementById("filter-custom-end")?.value || "";
-        if (start && end) {
-            periodText = `الفترة من ${start} إلى ${end}`;
-        } else if (start) {
-            periodText = `ابتداءً من ${start}`;
-        } else if (end) {
-            periodText = `حتى تاريخ ${end}`;
-        } else {
-            periodText = "فترة مخصصة (غير محددة بعد)";
-        }
+        periodText = (start || "...") + " — " + (end || "...");
     } else {
-        periodText = "كافة الأنشطة (بدون قيد زمني)";
+        periodText = _t("athar-export-mode-all");
     }
 
     const incProg = document.getElementById("include-in-progress")?.checked;
     const incPlan = document.getElementById("include-planned")?.checked;
     const incCanc = document.getElementById("include-canceled")?.checked;
 
-    const statusParts = ["المكتملة"];
-    if (incProg) statusParts.push("الجارية");
-    if (incPlan) statusParts.push("المخطط لها");
-    if (incCanc) statusParts.push("الملغاة");
-    const statusText = `الحالات: ${statusParts.join(" + ")}`;
+    const statusParts = [_t("athar-status-completed")];
+    if (incProg) statusParts.push(_t("athar-status-in-progress"));
+    if (incPlan) statusParts.push(_t("athar-status-planned"));
+    if (incCanc) statusParts.push(_t("athar-status-canceled"));
 
-    return `المجموعة: ${commName} | ${periodText} | ${statusText}`;
+    return `${commName} | ${periodText} | ${statusParts.join(" + ")}`;
 }
 
 async function updateLivePreview() {
@@ -170,7 +173,7 @@ async function updateLivePreview() {
     }
 
     if (!slug) {
-        if (badge) badge.textContent = "اختر مجتمعاً";
+        if (badge) badge.textContent = _t("athar-export-preview-count", 0);
         if (tbody) tbody.innerHTML = "";
         if (tableContainer) tableContainer.style.display = "none";
         if (emptyState) emptyState.style.display = "block";
@@ -201,7 +204,7 @@ async function updateLivePreview() {
     }
 
     if (badge) {
-        badge.textContent = "جاري التحقق...";
+        badge.textContent = "...";
     }
 
     try {
@@ -216,7 +219,7 @@ async function updateLivePreview() {
         activeProjects = projects;
 
         if (badge) {
-            badge.textContent = `${projects.length} نشاط مطابق`;
+            badge.textContent = _t("athar-export-preview-count", projects.length);
         }
 
         if (projects.length === 0) {
@@ -228,26 +231,29 @@ async function updateLivePreview() {
 
             if (tbody) {
                 tbody.innerHTML = "";
-                // Show up to 10 rows for preview
                 const previewRows = projects.slice(0, 10);
                 previewRows.forEach((p, idx) => {
                     const tr = document.createElement("tr");
 
                     const rawType = (p.project_type || "").toLowerCase();
-                    const typeDisplay = TYPE_TRANSLATIONS[rawType] || p.project_type || "نشاط مجتمعي";
+                    const typeKey = TYPE_KEY_LOOKUP[rawType];
+                    const typeDisplay = typeKey ? _t(typeKey) : (p.project_type || _t("athar-type-default"));
 
                     const rawStatus = (p.status || "").toLowerCase();
-                    const statusDisplay = STATUS_TRANSLATIONS[rawStatus] || p.status || "جارية";
+                    const statusKey = STATUS_KEY_LOOKUP[rawStatus];
+                    const statusDisplay = statusKey ? _t(statusKey) : (p.status || _t("athar-status-in-progress"));
 
                     const dateDisplay = p.start_date || (p.created_at ? String(p.created_at).slice(0, 10) : "—");
+                    const displayTitle = p.localized_title || p.title || "";
+                    const titleLang = p.localized_lang || p.primary_lang || "ar";
 
                     tr.innerHTML = `
-                        <td style="text-align: center; color: #72777d; font-size: 0.85rem;">${idx + 1}</td>
-                        <td><strong>${escapeHtml(p.title || "نشاط بدون عنوان")}</strong></td>
+                        <td style="text-align: center; font-size: 0.85rem;">${idx + 1}</td>
+                        <td><strong><bdi lang="${escapeHtml(titleLang)}" dir="auto">${escapeHtml(displayTitle)}</bdi></strong></td>
                         <td><span class="project-type-badge">${escapeHtml(typeDisplay)}</span></td>
                         <td><code>${escapeHtml(p.target_wiki || "arwiki")}</code></td>
-                        <td><span class="project-status project-status--${rawStatus.replace(/\\s+/g, '-')}">${escapeHtml(statusDisplay)}</span></td>
-                        <td style="color: #54595d; direction: ltr; text-align: right;">${escapeHtml(dateDisplay)}</td>
+                        <td><span class="project-status project-status--${rawStatus.replace(/\s+/g, "-")}">${escapeHtml(statusDisplay)}</span></td>
+                        <td class="export-date-cell">${escapeHtml(dateDisplay)}</td>
                     `;
                     tbody.appendChild(tr);
                 });
@@ -255,8 +261,8 @@ async function updateLivePreview() {
                 if (projects.length > 10) {
                     const extraTr = document.createElement("tr");
                     extraTr.innerHTML = `
-                        <td colspan="6" style="text-align: center; color: #54595d; font-style: italic; background: #fafafa; padding: 8px;">
-                            ... و ${projects.length - 10} أنشطة إضافية سيتم تضمينها في ملف الـ CSV
+                        <td colspan="6" class="export-extra-row-cell">
+                            ${escapeHtml(_t("athar-export-extra-rows", projects.length - 10))}
                         </td>
                     `;
                     tbody.appendChild(extraTr);
@@ -265,9 +271,8 @@ async function updateLivePreview() {
         }
     } catch (err) {
         console.error("Preview error:", err);
-        if (badge) badge.textContent = "خطأ في التحميل";
+        if (badge) badge.textContent = "!";
         if (emptyState) {
-            emptyState.textContent = "حدث خطأ أثناء تحميل بيانات المعاينة.";
             emptyState.style.display = "block";
         }
         if (tableContainer) tableContainer.style.display = "none";
@@ -276,15 +281,11 @@ async function updateLivePreview() {
 
 function triggerCsvDownload() {
     const slug = getCommunitySlug();
-    if (!slug) {
-        alert("يرجى اختيار المجتمع أولاً.");
-        return;
-    }
+    if (!slug) return;
 
     const queryParams = buildQueryParams();
     queryParams.set("format", "csv");
     const exportUrl = `/api/${encodeURIComponent(slug)}/export?${queryParams.toString()}`;
-
     window.location.href = exportUrl;
 }
 
@@ -299,6 +300,5 @@ function escapeHtml(str) {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
-    // Set default filter mode
     setFilterMode("year");
 });
